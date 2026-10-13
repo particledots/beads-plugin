@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 
 using APF = juce::AudioParameterFloat;
 using APB = juce::AudioParameterBool;
@@ -9,11 +10,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout BeadsAudioProcessor::createL
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
     auto unit = [] (const char* id, const char* name, float def)
     {
-        return std::make_unique<APF> (juce::ParameterID { id, 1 }, name, juce::NormalisableRange<float> (0.f, 1.f, 0.0001f), def);
+        return std::make_unique<APF> (juce::ParameterID { id, 1 }, name, juce::NormalisableRange<float> (0.f, 1.f, 0.0001f), def,
+                                      juce::AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return juce::String (v, 2); }));
     };
     auto bip = [] (const char* id, const char* name)
     {
-        return std::make_unique<APF> (juce::ParameterID { id, 1 }, name, juce::NormalisableRange<float> (-1.f, 1.f, 0.0001f), 0.f);
+        return std::make_unique<APF> (juce::ParameterID { id, 1 }, name, juce::NormalisableRange<float> (-1.f, 1.f, 0.0001f), 0.f,
+                                      juce::AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return juce::String (v, 2); }));
     };
 
     p.push_back (unit ("time",  "Time",  0.5f));
@@ -121,7 +124,7 @@ void BeadsAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
 juce::AudioProcessorEditor* BeadsAudioProcessor::createEditor()
 {
-    return new juce::GenericAudioProcessorEditor (*this);
+    return new BeadsEditor (*this);
 }
 
 void BeadsAudioProcessor::getStateInformation (juce::MemoryBlock& dest)

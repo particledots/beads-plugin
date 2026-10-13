@@ -55,7 +55,7 @@ Headless DSP test (any OS): `cmake --build build --target engine_test && build/e
   and how closely it sounds like the hardware. No A/B against a module was possible.
 * The vendored source is the `insolentconstruct/eurorack` master as of Oct 2026. The zip's README says its firmware has "one change to
   grain stealing"; I couldn't find that changelog in the repo, so I haven't confirmed the vendored source includes it.
-* The UI is JUCE's generic parameter editor. A custom panel is a separate step.
+* The UI is a basic custom panel (knobs, switches, menus). It is functional rather than polished.
 
 ## Licensing
 

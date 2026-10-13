@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.22)
-# Must be set before project(): oldest macOS the plugin will load on (Monterey 12.x works).
-if(APPLE)
-  set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
-endif()
-
 project(BeadsPlugin VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(APPLE)
+  # Native Apple silicon by default; uncomment for a universal binary.
+  # set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "")
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
+endif()
 
 include(FetchContent)
 FetchContent_Declare(JUCE
@@ -57,7 +57,7 @@ else()
 endif()
 
 # --- The plugin ---
-target_sources(Beads PRIVATE src/PluginProcessor.cpp)
+target_sources(Beads PRIVATE src/PluginProcessor.cpp src/PluginEditor.cpp)
 target_compile_definitions(Beads PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
 target_link_libraries(Beads PRIVATE
   beads_core

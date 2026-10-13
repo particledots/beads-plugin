@@ -1,0 +1,147 @@
+#include "BeadsEngine.h"
+#include <algorithm>
+#include <cstring>
+#include "beads/dsp/processor.h"
+#include "stmlib/utils/gate_flags.h"
+
+BeadsEngine::BeadsEngine() : proc (new beads::Processor())
+{
+    delayBuf1.assign (512 * 1024, 0);
+    delayBuf2.assign (256 * 1024, 0);
+    reverbBuf.assign (32768, 0);
+    uint8_t* bufs[3] = { delayBuf1.data(), delayBuf1.data() + 256 * 1024, delayBuf2.data() };
+    proc->Init (bufs, reverbBuf.data());
+}
+
+BeadsEngine::~BeadsEngine() = default;
+
+void BeadsEngine::prepare (double sr)
+{
+    hostRate = sr;
+    curMedia = -1;                // force reconfigure
+    configure (beads::Processor::MEDIA_DIGITAL, false);
+}
+
+void BeadsEngine::configure (int media, bool mono)
+{
+    curMedia = media; curMono = mono;
+    proc->Configure ((beads::Processor::Media) media, mono);   // also clears delay memory, as on the module
+    procRate = (double) proc->sample_rate();
+    blockSize = (size_t) std::max (1.0, std::round (procRate / 4000.0));   // module's block rate is 4 kHz
+    rsInL.init (hostRate, procRate);  rsInR.init (hostRate, procRate);
+    rsOutL.init (procRate, hostRate); rsOutR.init (procRate, hostRate);
+    inQueue.clear(); inQueueHead = 0;
+    procOutL.clear(); procOutR.clear();
+    hostQL.clear(); hostQR.clear(); hostQHead = 0;
+    // prime the output with a few blocks of silence so the output resampler never starves
+    const size_t prime = blockSize * 2 + SincResampler::kTaps;
+    procOutL.assign (prime, 0.0f); procOutR.assign (prime, 0.0f);
+    prevGateFlags = 0;
+}
+
+int BeadsEngine::latencyInHostSamples() const
+{
+    const double procFrames = (double) blockSize * 2 + SincResampler::kTaps;   // block + priming
+    if (std::abs (hostRate - procRate) < 1e-6) return (int) procFrames;       // resamplers bypassed
+    return (int) std::ceil (procFrames * hostRate / procRate);
+}
+
+void BeadsEngine::runBlocks (const Params& p)
+{
+    using namespace beads;
+    const size_t B = blockSize;
+
+    Parameters prm;
+    auto setp = [] (RandomizedParameter& r, float base, float att) {
+        r.base = base; r.attenuverter = att; r.cv = 0.0f; r.has_cv = false;
+    };
+    setp (prm.time,  p.time,  p.timeMod);
+    setp (prm.size,  p.size,  p.sizeMod);
+    setp (prm.shape, p.shape, p.shapeMod);
+    setp (prm.pitch, p.pitchSemitones, p.pitchMod);
+    prm.monophonic_mode = false;
+
+    ModulatedParameter d; d.base = p.density; d.cv = 0.0f;
+    Processor::MixParameters m;
+    m.feedback = p.feedback; m.dry_wet = p.dryWet; m.reverb_amount = p.reverb; m.output_gate = false;
+
+    SeedButtonState seedState = SEED_BUTTON_STATE_OFF;
+    bool useGateInput = false;
+    switch (p.seedMode)
+    {
+        case FreeRun:  seedState = SEED_BUTTON_STATE_LOCKED; break;
+        case MidiGate: seedState = SEED_BUTTON_STATE_OFF; useGateInput = true; break;
+        case Manual:   seedState = p.seedButton ? SEED_BUTTON_STATE_ON : SEED_BUTTON_STATE_OFF; break;
+    }
+
+    std::vector<FloatFrame> in (B), out (B);
+    std::unique_ptr<bool[]> freeze (new bool[B]);
+    std::vector<stmlib::GateFlags> seed (B);
+
+    while (inQueue.size() - inQueueHead >= B)
+    {
+        for (size_t i = 0; i < B; ++i)
+        {
+            const Frame& f = inQueue[inQueueHead + i];
+            in[i].l = f.l; in[i].r = f.r;
+            freeze[i] = p.freeze;
+            prevGateFlags = seed[i] = stmlib::ExtractGateFlags ((stmlib::GateFlags) prevGateFlags, f.gate != 0);
+        }
+        inQueueHead += B;
+
+        proc->Process (seedState, useGateInput ? seed.data() : nullptr, freeze.get(),
+                       d, prm, m, in.data(), out.data(), B);
+
+        for (size_t i = 0; i < B; ++i)
+        {
+            float l = out[i].l, r = out[i].r;
+            if (! std::isfinite (l)) l = 0.0f;
+            if (! std::isfinite (r)) r = 0.0f;
+            procOutL.push_back (std::clamp (l, -4.0f, 4.0f));
+            procOutR.push_back (std::clamp (r, -4.0f, 4.0f));
+        }
+    }
+    if (inQueueHead > 4096)   // compact
+    {
+        inQueue.erase (inQueue.begin(), inQueue.begin() + (long) inQueueHead);
+        inQueueHead = 0;
+    }
+}
+
+void BeadsEngine::process (const float* inL, const float* inR, float* outL, float* outR,
+                           int n, const Params& p, const uint8_t* gate)
+{
+    if (p.media != curMedia || p.mono != curMono)
+        configure (p.media, p.mono);
+
+    // 1. host rate -> processor rate (gate flag is carried along by nearest-sample mapping)
+    tmpL.clear(); tmpR.clear();
+    rsInL.process (inL, (size_t) n, tmpL);
+    rsInR.process (inR, (size_t) n, tmpR);
+    const size_t produced = std::min (tmpL.size(), tmpR.size());
+    for (size_t i = 0; i < produced; ++i)
+    {
+        size_t src = produced > 0 ? std::min ((size_t) n - 1, i * (size_t) n / produced) : 0;
+        inQueue.push_back ({ tmpL[i], tmpR[i], (uint8_t) (gate ? gate[src] : 0) });
+    }
+
+    // 2. run the module DSP
+    runBlocks (p);
+
+    // 3. processor rate -> host rate, queued so block-size mismatches never drop samples
+    rsOutL.process (procOutL.data(), procOutL.size(), hostQL);
+    rsOutR.process (procOutR.data(), procOutR.size(), hostQR);
+    procOutL.clear(); procOutR.clear();
+
+    const size_t avail = std::min (hostQL.size(), hostQR.size()) - hostQHead;
+    const size_t take = std::min (avail, (size_t) n);
+    for (size_t i = 0; i < take; ++i) { outL[i] = hostQL[hostQHead + i]; outR[i] = hostQR[hostQHead + i]; }
+    for (size_t i = take; i < (size_t) n; ++i) { outL[i] = 0.0f; outR[i] = 0.0f; }   // underrun guard
+    hostQHead += take;
+    if (hostQHead > 8192)
+    {
+        hostQL.erase (hostQL.begin(), hostQL.begin() + (long) hostQHead);
+        hostQR.erase (hostQR.begin(), hostQR.begin() + (long) hostQHead);
+        hostQHead = 0;
+    }
+}

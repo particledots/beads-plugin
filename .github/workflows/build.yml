@@ -1,0 +1,51 @@
+name: Build plugin (macOS)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:      # adds a "Run workflow" button in the Actions tab
+
+jobs:
+  build-macos:
+    runs-on: macos-14     # Apple silicon runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOPY_PLUGIN_AFTER_BUILD=OFF
+
+      - name: Build engine test, then run it
+        run: |
+          cmake --build build --target engine_test -j4
+          ./build/engine_test
+
+      - name: Build AU + VST3
+        run: cmake --build build --target Beads_AU Beads_VST3 -j4
+
+      - name: Ad-hoc sign (lets Apple silicon load an unsigned build)
+        run: |
+          for b in build/Beads_artefacts/Release/AU/*.component build/Beads_artefacts/Release/VST3/*.vst3; do
+            codesign --force --deep -s - "$b"
+          done
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp -R build/Beads_artefacts/Release/AU/*.component dist/
+          cp -R build/Beads_artefacts/Release/VST3/*.vst3 dist/
+          cat > dist/INSTALL.txt <<'TXT'
+          1. Unzip.
+          2. Open Terminal and run:   xattr -dr com.apple.quarantine ~/Downloads/Beads-macOS/*
+             (adjust the path if you unzipped elsewhere; this clears the "downloaded from internet" block)
+          3. Copy "Unofficial Beads.component" to  ~/Library/Audio/Plug-Ins/Components/
+             Copy "Unofficial Beads.vst3"       to  ~/Library/Audio/Plug-Ins/VST3/
+          4. In Logic: Settings > Plug-in Manager > rescan. Look for "particledots: Unofficial Beads"
+             (use a MIDI-controlled effect slot if you want the MIDI gate).
+          TXT
+          ditto -c -k --keepParent dist Beads-macOS.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Beads-macOS
+          path: Beads-macOS.zip

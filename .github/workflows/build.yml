@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOPY_PLUGIN_AFTER_BUILD=OFF
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCOPY_PLUGIN_AFTER_BUILD=OFF -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
       - name: Build engine test, then run it
         run: |
@@ -34,6 +34,7 @@ jobs:
           mkdir -p dist
           cp -R build/Beads_artefacts/Release/AU/*.component dist/
           cp -R build/Beads_artefacts/Release/VST3/*.vst3 dist/
+          lipo -archs dist/*.component/Contents/MacOS/*
           cat > dist/INSTALL.txt <<'TXT'
           1. Unzip.
           2. Open Terminal and run:   xattr -dr com.apple.quarantine ~/Downloads/Beads-macOS/*

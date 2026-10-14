@@ -126,6 +126,13 @@ class GranularPlayer {
     *pan = BoundedRandomFloat(pan_spread);
   }
   
+  // Plugin addition: see GrainEnvelope::SetSoftEdges.
+  inline void SetSoftEdges(bool soft) {
+    for (int i = 0; i < num_grains; ++i) {
+      grain_[i].SetSoftEdges(soft);
+    }
+  }
+
   inline T* new_grain() { return grain_priority_list_[0]; }
   
   inline void Tick() {

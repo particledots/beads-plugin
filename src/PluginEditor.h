@@ -42,10 +42,12 @@ private:
     Knob density, feedback, dryWet, reverb;
 
     juce::ToggleButton freeze { "FREEZE" }, seed { "SEED" }, mono { "MONO" };
+    juce::ToggleButton snap { "PITCH SNAP" }, softEdges { "SOFT GRAIN EDGES" };
     juce::ComboBox gateMode, quality;
     juce::Label gateLabel { {}, "GRAIN GATE" }, qualityLabel { {}, "QUALITY" };
-    std::unique_ptr<ButtonAtt> freezeAtt, seedAtt, monoAtt;
+    std::unique_ptr<ButtonAtt> freezeAtt, seedAtt, monoAtt, snapAtt, softEdgesAtt;
     std::unique_ptr<ComboAtt> gateAtt, qualityAtt;
+    std::unique_ptr<juce::ParameterAttachment> freezeLockAtt;   // greys out Quality/Mono while frozen (declared last)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BeadsEditor)
 };

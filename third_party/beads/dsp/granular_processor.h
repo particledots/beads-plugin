@@ -83,6 +83,12 @@ class GranularProcessor {
     multitap_delay_.Reset();
   }
   
+  // Plugin addition: see GrainEnvelope::SetSoftEdges.
+  inline void SetSoftEdges(bool soft) {
+    dummy_granular_player_.SetSoftEdges(soft);
+    granular_player_.SetSoftEdges(soft);
+  }
+
   inline int max_delay_times_ratio() const {
     return max_delay * ratio;
   }

@@ -22,10 +22,11 @@ public:
     bool producesMidi() const override { return false; }
     double getTailLengthSeconds() const override { return 8.0; }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    // Factory presets (starting points; they set the sound knobs and Quality, not Freeze/Mono/Grain Gate)
+    int getNumPrograms() override;
+    int getCurrentProgram() override { return currentProgram; }
+    void setCurrentProgram (int) override;
+    const juce::String getProgramName (int) override;
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock&) override;
@@ -41,6 +42,7 @@ private:
     std::vector<uint8_t> gateFlags;
     std::vector<float> scratchL, scratchR;
     int heldNotes = 0;
+    int currentProgram = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BeadsAudioProcessor)
 };

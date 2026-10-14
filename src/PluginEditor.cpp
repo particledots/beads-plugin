@@ -62,11 +62,12 @@ void BeadsLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& 
 {
     auto r = b.getLocalBounds().toFloat().reduced (2.0f);
     const bool on = b.getToggleState();
-    g.setColour (on ? kAccent : kPanel);
+    const float a = b.isEnabled() ? 1.0f : 0.4f;   // dimmed when unavailable (e.g. MONO while frozen)
+    g.setColour ((on ? kAccent : kPanel).withMultipliedAlpha (a));
     g.fillRoundedRectangle (r, 6.0f);
-    g.setColour (on ? kAccent : kTrack);
+    g.setColour ((on ? kAccent : kTrack).withMultipliedAlpha (a));
     g.drawRoundedRectangle (r, 6.0f, 1.2f);
-    g.setColour (on ? juce::Colours::black : kText);
+    g.setColour ((on ? juce::Colours::black : kText).withMultipliedAlpha (a));
     g.setFont (juce::Font (juce::FontOptions (13.0f, juce::Font::bold)));
     g.drawText (b.getButtonText(), b.getLocalBounds(), juce::Justification::centred);
 }
@@ -88,10 +89,12 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
     addKnob (dryWet,   "dry_wet",  "DRY/WET",  false);
     addKnob (reverb,   "reverb",   "REVERB",   false);
 
-    for (auto* b : { &freeze, &seed, &mono }) addAndMakeVisible (*b);
+    for (auto* b : { &freeze, &seed, &mono, &snap, &softEdges }) addAndMakeVisible (*b);
     freezeAtt = std::make_unique<ButtonAtt> (proc.apvts, "freeze", freeze);
     seedAtt   = std::make_unique<ButtonAtt> (proc.apvts, "seed", seed);
     monoAtt   = std::make_unique<ButtonAtt> (proc.apvts, "mono", mono);
+    snapAtt   = std::make_unique<ButtonAtt> (proc.apvts, "pitch_snap", snap);
+    softEdgesAtt = std::make_unique<ButtonAtt> (proc.apvts, "soft_edges", softEdges);
 
     gateMode.addItemList ({ "Free-run", "MIDI gate", "Manual" }, 1);
     quality.addItemList ({ "Dirty tape", "Clean tape", "Vintage digital", "Digital" }, 1);
@@ -106,7 +109,18 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
         addAndMakeVisible (*l);
     }
 
-    setSize (640, 500);
+    // Quality and Mono changes are held back while Freeze is on (they would clear the frozen buffer),
+    // so show those two controls as unavailable meanwhile.
+    freezeLockAtt = std::make_unique<juce::ParameterAttachment> (*proc.apvts.getParameter ("freeze"),
+        [this] (float v)
+        {
+            const bool frozen = v > 0.5f;
+            quality.setEnabled (! frozen);
+            mono.setEnabled (! frozen);
+        });
+    freezeLockAtt->sendInitialUpdate();
+
+    setSize (640, 548);
 }
 
 BeadsEditor::~BeadsEditor() { setLookAndFeel (nullptr); }
@@ -143,7 +157,7 @@ void BeadsEditor::paint (juce::Graphics& g)
     g.setColour (kPanel);
     g.fillRoundedRectangle (12.0f, 58.0f, (float) getWidth() - 24.0f, 232.0f, 10.0f);
     g.fillRoundedRectangle (12.0f, 298.0f, (float) getWidth() - 24.0f, 132.0f, 10.0f);
-    g.fillRoundedRectangle (12.0f, 438.0f, (float) getWidth() - 24.0f, 52.0f, 10.0f);
+    g.fillRoundedRectangle (12.0f, 438.0f, (float) getWidth() - 24.0f, 100.0f, 10.0f);
 }
 
 void BeadsEditor::resized()
@@ -181,4 +195,9 @@ void BeadsEditor::resized()
     gateMode.setBounds  (row3.removeFromLeft (100).reduced (0, 6)); row3.removeFromLeft (14);
     qualityLabel.setBounds (row3.removeFromLeft (52));
     quality.setBounds   (row3.reduced (0, 6));
+
+    // Row 4: extra options
+    auto row4 = juce::Rectangle<int> (24, 490, W - 48, 40);
+    snap.setBounds (row4.removeFromLeft (120)); row4.removeFromLeft (8);
+    softEdges.setBounds (row4.removeFromLeft (160));
 }

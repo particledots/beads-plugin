@@ -37,8 +37,12 @@ Headless DSP test (any OS): `cmake --build build --target engine_test && build/e
 | Density | density knob (at noon grains stop in Free-run mode, as on the module) |
 | Feedback, Dry/Wet, Reverb | the three mix knobs |
 | Freeze | freeze button |
-| Quality | Dirty tape / Clean tape / Vintage digital / Digital (switching clears the buffer, like the module) |
-| Mono | mono/stereo buffer |
+| Quality | Dirty tape / Clean tape / Vintage digital / Digital (switching clears the buffer, like the module). Held back while Freeze is on so a frozen buffer is never wiped; the change applies when you release Freeze |
+| Mono | mono/stereo buffer (also held back while Freeze is on) |
+| Pitch Snap | **Our addition, off by default.** Pitch settles on unison, semitone, minor/major third, fifth and octaves when within a quarter of a semitone; free everywhere else |
+| Soft Grain Edges | **Our addition, off by default.** Lengthens the shortest grain fades (0.5 ms in / 10 ms out becomes 4 ms in / 20 ms out) to smooth the ticks from very short, hard-edged grains. Applies to grains started after you switch it |
+
+**Presets:** 8 factory presets (Init, Slow Bloom, Glass Dust, Tape Smear, Stutter Grid, Octave Fog, Long Haze, Broken Cassette) appear in the host's preset menu (Logic's AU preset list). They set the sound knobs and Quality, not Freeze, Mono or Grain Gate. They are starting points written from the knob meanings and **have not been tuned by ear yet**.
 | Grain Gate | **Free-run** = seed button locked; **MIDI gate** = grains only while a MIDI note is held (the module's SEED gate input); **Manual** = the "Seed (manual)" switch |
 
 ## How it works / honest limits
@@ -50,9 +54,11 @@ Headless DSP test (any OS): `cmake --build build --target engine_test && build/e
 * The host's CV inputs are not modelled; the module's CV and attenuverter logic is reached only through the "Mod" parameters
   (no CV, internal randomness). The assignable CV input, gate-output mode, synth mode (the idle oscillator),
   calibration, and the pot/UI code are left out.
-* Verified here: the VST3 and Standalone build on Linux; the DSP wrapper runs at 44.1/48/96 kHz in all four modes with finite
-  output; dry-path noise floor around -72 dB. **Not verified:** the AU build, loading in Logic, MIDI-gate behaviour in a real host,
-  and how closely it sounds like the hardware. No A/B against a module was possible.
+* Verified here: the VST3 builds on Linux (Oct 2026 changes included); the DSP wrapper runs at 44.1/48/96 kHz in all four modes with finite
+  output; dry-path noise floor around -72 dB; the Freeze lock holds a Quality change back and applies it on release; Soft Grain Edges
+  and Pitch Snap keep the output finite in all four modes, and Soft Grain Edges lowers a roughness measure on a sine test (a measurement,
+  not a listening test). **Not verified:** the AU build, loading in Logic, MIDI-gate behaviour in a real host, how the presets sound,
+  whether Pitch Snap feels right, and how closely it sounds like the hardware. No A/B against a module was possible.
 * The vendored source is the `insolentconstruct/eurorack` master as of Oct 2026. The zip's README says its firmware has "one change to
   grain stealing"; I couldn't find that changelog in the repo, so I haven't confirmed the vendored source includes it.
 * The UI is a basic custom panel (knobs, switches, menus). It is functional rather than polished.
@@ -60,5 +66,6 @@ Headless DSP test (any OS): `cmake --build build --target engine_test && build/e
 ## Licensing
 
 `third_party/` is MIT-licensed code by Emilie Gillet (copyright notices kept in the file headers; `third_party/stmlib/LICENSE`).
-Keep those notices if you redistribute. The hardware design is CC-BY-SA; none of it is used here. The wrapper code in `src/` has
+Keep those notices if you redistribute. `THIRD-PARTY-LICENSES.txt` (also copied into the downloadable zip) carries the MIT text.
+Five small files under `third_party/beads/dsp/` were extended with a `SetSoftEdges` option (marked "Plugin addition" in the source). The hardware design is CC-BY-SA; none of it is used here. The wrapper code in `src/` has
 no licence assigned yet. JUCE is used under its own licence terms (AGPLv3 / commercial); check them before distributing builds.

@@ -49,6 +49,9 @@ class Grain {
     return remaining_samples_;
   }
   
+  // Plugin addition: see GrainEnvelope::SetSoftEdges.
+  inline void SetSoftEdges(bool soft) { envelope_.SetSoftEdges(soft); }
+
   inline void FadeOut(int duration) {
     if (remaining_samples_ > duration) {
       remaining_samples_ = voice_stealing_envelope_.Start(float(duration));

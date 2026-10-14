@@ -39,7 +39,61 @@ juce::AudioProcessorValueTreeState::ParameterLayout BeadsAudioProcessor::createL
     p.push_back (std::make_unique<APC> (juce::ParameterID { "media", 1 }, "Quality",
                  juce::StringArray { "Dirty tape", "Clean tape", "Vintage digital", "Digital" }, 3));
     p.push_back (std::make_unique<APB> (juce::ParameterID { "mono", 1 }, "Mono", false));
+    // Added after 0.1.0, so they carry a higher version hint (keeps AU hosts happy with older sessions).
+    p.push_back (std::make_unique<APB> (juce::ParameterID { "pitch_snap", 2 }, "Pitch Snap", false));
+    p.push_back (std::make_unique<APB> (juce::ParameterID { "soft_edges", 2 }, "Soft Grain Edges", false));
     return { p.begin(), p.end() };
+}
+
+namespace
+{
+    // Starting points, written from the knob meanings in the README. Not yet tuned by ear.
+    struct Preset
+    {
+        const char* name;
+        float time, size, shape, pitch;
+        float timeMod, sizeMod, shapeMod, pitchMod;
+        float density, feedback, dryWet, reverb;
+        int media;   // 0 Dirty tape, 1 Clean tape, 2 Vintage digital, 3 Digital
+    };
+
+    const Preset kPresets[] =
+    {
+        //  name              time  size  shape pitch | tMod  sMod  shMod pMod | dens  fdbk  d/w   rev | media
+        { "Init",             0.50f, 0.50f, 0.50f,   0.f,  0.00f, 0.00f, 0.00f, 0.00f,  0.75f, 0.20f, 0.50f, 0.20f, 3 },
+        { "Slow Bloom",       0.60f, 0.75f, 0.80f,   0.f,  0.20f, 0.10f, 0.00f, 0.00f,  0.70f, 0.35f, 0.60f, 0.45f, 3 },
+        { "Glass Dust",       0.30f, 0.25f, 0.50f,  12.f,  0.50f, 0.30f, 0.00f, 0.20f,  0.85f, 0.15f, 0.55f, 0.30f, 3 },
+        { "Tape Smear",       0.55f, 0.60f, 0.65f,   0.f,  0.00f, 0.00f, 0.00f, 0.00f,  0.65f, 0.50f, 0.50f, 0.25f, 0 },
+        { "Stutter Grid",     0.20f, 0.35f, 0.15f,   0.f,  0.00f, 0.00f, 0.00f, 0.00f,  0.35f, 0.25f, 0.60f, 0.10f, 3 },
+        { "Octave Fog",       0.50f, 0.55f, 0.60f,  12.f,  0.00f, 0.00f, 0.00f, 0.15f,  0.80f, 0.40f, 0.55f, 0.50f, 2 },
+        { "Long Haze",        0.80f, 0.90f, 0.90f,   0.f,  0.30f, 0.00f, 0.00f, 0.00f,  0.90f, 0.55f, 0.65f, 0.60f, 1 },
+        { "Broken Cassette",  0.40f, 0.40f, 0.50f,  -7.f,  0.40f, 0.00f, 0.30f, 0.40f,  0.80f, 0.45f, 0.50f, 0.20f, 0 },
+    };
+    constexpr int kNumPresets = (int) (sizeof (kPresets) / sizeof (kPresets[0]));
+}
+
+int BeadsAudioProcessor::getNumPrograms() { return kNumPresets; }
+
+const juce::String BeadsAudioProcessor::getProgramName (int i)
+{
+    return juce::isPositiveAndBelow (i, kNumPresets) ? juce::String (kPresets[i].name) : juce::String();
+}
+
+void BeadsAudioProcessor::setCurrentProgram (int i)
+{
+    if (! juce::isPositiveAndBelow (i, kNumPresets)) return;
+    currentProgram = i;
+    const auto& p = kPresets[i];
+
+    auto set = [this] (const char* id, float realValue)
+    {
+        if (auto* prm = apvts.getParameter (id))
+            prm->setValueNotifyingHost (prm->convertTo0to1 (realValue));
+    };
+    set ("time", p.time);   set ("size", p.size);   set ("shape", p.shape);   set ("pitch", p.pitch);
+    set ("time_mod", p.timeMod);   set ("size_mod", p.sizeMod);   set ("shape_mod", p.shapeMod);   set ("pitch_mod", p.pitchMod);
+    set ("density", p.density);   set ("feedback", p.feedback);   set ("dry_wet", p.dryWet);   set ("reverb", p.reverb);
+    set ("media", (float) p.media);
 }
 
 BeadsAudioProcessor::BeadsAudioProcessor()
@@ -78,6 +132,8 @@ BeadsEngine::Params BeadsAudioProcessor::readParams() const
     p.seedButton = v ("seed") > 0.5f;
     p.media = (int) v ("media");
     p.mono = v ("mono") > 0.5f;
+    p.pitchSnap = v ("pitch_snap") > 0.5f;
+    p.softEdges = v ("soft_edges") > 0.5f;
     return p;
 }
 

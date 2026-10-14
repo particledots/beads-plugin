@@ -19,6 +19,7 @@ void BeadsEngine::prepare (double sr)
 {
     hostRate = sr;
     curMedia = -1;                // force reconfigure
+    paramsApplied = false;        // the first process() call applies the host's Quality/Mono even if frozen
     configure (beads::Processor::MEDIA_DIGITAL, false);
 }
 
@@ -26,6 +27,7 @@ void BeadsEngine::configure (int media, bool mono)
 {
     curMedia = media; curMono = mono;
     proc->Configure ((beads::Processor::Media) media, mono);   // also clears delay memory, as on the module
+    proc->SetSoftEdges (curSoft);                              // Configure resets the grains to the default fades
     procRate = (double) proc->sample_rate();
     blockSize = (size_t) std::max (1.0, std::round (procRate / 4000.0));   // module's block rate is 4 kHz
     rsInL.init (hostRate, procRate);  rsInR.init (hostRate, procRate);
@@ -46,6 +48,19 @@ int BeadsEngine::latencyInHostSamples() const
     return (int) std::ceil (procFrames * hostRate / procRate);
 }
 
+// Our own addition (not from the Beads firmware): when on, the Pitch value settles on a musical interval
+// if it is within a quarter of a semitone of one, and is left alone everywhere else.
+static float snapPitch (float semitones, bool enabled)
+{
+    if (! enabled) return semitones;
+    static const float kDetents[] = { 0.f, 1.f, 3.f, 4.f, 7.f, 12.f, 24.f, 36.f, 48.f };   // unison, semitone, minor/major third, fifth, octaves
+    const float a = std::fabs (semitones);
+    for (float d : kDetents)
+        if (std::fabs (a - d) < 0.25f)
+            return semitones < 0.f ? -d : d;
+    return semitones;
+}
+
 void BeadsEngine::runBlocks (const Params& p)
 {
     using namespace beads;
@@ -58,7 +73,7 @@ void BeadsEngine::runBlocks (const Params& p)
     setp (prm.time,  p.time,  p.timeMod);
     setp (prm.size,  p.size,  p.sizeMod);
     setp (prm.shape, p.shape, p.shapeMod);
-    setp (prm.pitch, p.pitchSemitones, p.pitchMod);
+    setp (prm.pitch, snapPitch (p.pitchSemitones, p.pitchSnap), p.pitchMod);
     prm.monophonic_mode = false;
 
     ModulatedParameter d; d.base = p.density; d.cv = 0.0f;
@@ -111,8 +126,13 @@ void BeadsEngine::runBlocks (const Params& p)
 void BeadsEngine::process (const float* inL, const float* inR, float* outL, float* outR,
                            int n, const Params& p, const uint8_t* gate)
 {
-    if (p.media != curMedia || p.mono != curMono)
+    if (p.softEdges != curSoft) { curSoft = p.softEdges; proc->SetSoftEdges (curSoft); }
+
+    // Changing Quality or Mono clears the buffer, so while Freeze is on the change is held back
+    // (it applies once Freeze is released). The very first block always applies the saved settings.
+    if ((p.media != curMedia || p.mono != curMono) && (! p.freeze || ! paramsApplied))
         configure (p.media, p.mono);
+    paramsApplied = true;
 
     // 1. host rate -> processor rate (gate flag is carried along by nearest-sample mapping)
     tmpL.clear(); tmpR.clear();

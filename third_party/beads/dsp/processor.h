@@ -72,6 +72,15 @@ class Processor {
   void Init(uint8_t* buffers[], uint16_t* reverb_buffer);
   void Configure(Media media, bool mono);
   
+  // Plugin addition: see GrainEnvelope::SetSoftEdges. Applies to all four
+  // quality modes; call again after Configure(), which resets the grains.
+  inline void SetSoftEdges(bool soft) {
+    processor_digital_.SetSoftEdges(soft);
+    processor_vintage_digital_.SetSoftEdges(soft);
+    processor_clean_tape_.SetSoftEdges(soft);
+    processor_dirty_tape_.SetSoftEdges(soft);
+  }
+
   inline Media media() const { return media_; }
   inline bool mono() const { return mono_; }
   

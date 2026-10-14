@@ -34,6 +34,7 @@ jobs:
           mkdir -p dist
           cp -R build/Beads_artefacts/Release/AU/*.component dist/
           cp -R build/Beads_artefacts/Release/VST3/*.vst3 dist/
+          cp THIRD-PARTY-LICENSES.txt dist/
           lipo -archs dist/*.component/Contents/MacOS/*
           # Show the minimum macOS version baked into each slice (should say 11.0):
           for a in arm64 x86_64; do echo "== $a"; lipo -thin $a dist/*.component/Contents/MacOS/* -output /tmp/slice_$a; otool -l /tmp/slice_$a | grep -A4 -E "LC_BUILD_VERSION|LC_VERSION_MIN" | grep -E "minos|version"; done

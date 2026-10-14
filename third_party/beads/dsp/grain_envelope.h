@@ -49,8 +49,17 @@ class GrainEnvelope {
     phase_increment_[STAGE_DONE] = 0.0f;
     smoothness_ = 0.0f;
     
+    sample_rate_ = sample_rate;
     min_attack_ = 0.0005f * sample_rate;
     min_release_ = 0.010f * sample_rate;
+  }
+
+  // Plugin addition (not in the original firmware): optionally lengthen the
+  // shortest allowed fades (0.5 ms in / 10 ms out -> 4 ms in / 20 ms out).
+  // Takes effect on grains started afterwards. Off by default.
+  inline void SetSoftEdges(bool soft) {
+    min_attack_ = (soft ? 0.004f : 0.0005f) * sample_rate_;
+    min_release_ = (soft ? 0.020f : 0.010f) * sample_rate_;
   }
 
   inline void Start(float duration, float shape) {
@@ -146,6 +155,7 @@ class GrainEnvelope {
   float phase_increment_[STAGE_LAST];
   float smoothness_;
   
+  float sample_rate_;
   float min_attack_;
   float min_release_;
 

@@ -25,6 +25,8 @@ public:
         int seedMode = FreeRun;
         int media = Digital;
         bool mono = false;
+        bool pitchSnap = false;         // our addition: Pitch settles on musical intervals (see snapPitch)
+        bool softEdges = false;         // our addition: longer minimum grain fades (see GrainEnvelope::SetSoftEdges)
     };
 
     BeadsEngine();
@@ -51,6 +53,8 @@ private:
 
     double hostRate = 48000.0, procRate = 48000.0;
     int curMedia = -1; bool curMono = false;
+    bool curSoft = false;
+    bool paramsApplied = false;   // false until the first block has applied the host's Quality/Mono
     size_t blockSize = 12;
 
     SincResampler rsInL, rsInR, rsOutL, rsOutR;

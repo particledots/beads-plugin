@@ -77,11 +77,14 @@ What the loader accepts:
 * Each wave has its DC removed and its peak set to the level the factory waves use. A silent or flat file is refused with a message.
 * Not supported: compressed WAV (ADPCM, MP3-in-WAV), files over 64 MB, cycle lengths under 8 or over 65536 samples.
 
-**Verified:** the bank exported from GrainKontrol as factory bank 12 (`tests/data/bank-12-fm-8-1.wav`) loads into exactly the table
-values the firmware stores for that bank (all 4160 match), and played from slot 12 it is sample-for-sample identical to the factory bank.
-That is the same format check as the headless test (`engine_test`). **Not verified:** how banks made from other WAVs sound compared with
-the hardware or with GrainKontrol's own playback; only this one export was available to check the file layout against. The exporter's
-3-sample rotation and the zero-mean centring were worked out from that file and the factory table, not from GrainKontrol's source.
+**Verified (headless test, `engine_test`):** the bank exported from GrainKontrol as factory bank 12 (`tests/data/bank-12-fm-8-1.wav`) loads
+into exactly the table values the firmware stores for that bank (all 4160 match), and played from slot 12 it is sample-for-sample identical
+to the factory bank. A second export, a custom morph (`tests/data/bank-07-braids-digital-and-metallic.wav`), loads well formed; its last
+wave, which is factory bank 7's wave 16, comes out bit-exact, and every wave converts back to the file's samples to within rounding.
+**Not verified:** how banks made from other WAVs sound compared with the hardware or with GrainKontrol's own playback, and whether
+GrainKontrol would store a custom wave with exactly the same rounding (the loader matches it wherever the source is a factory wave; for
+a custom morph the values can differ by one step of 1/512 of the peak). The exporter's 3-sample rotation and the zero-mean centring were
+worked out from these files and the factory table, not from GrainKontrol's source.
 * Verified here: the VST3 builds on Linux (Oct 2026 changes included); the DSP wrapper runs at 44.1/48/96 kHz in all four modes with finite
   output; dry-path noise floor around -72 dB; the Freeze lock holds a Quality change back and applies it on release; Soft Grain Edges
   and Pitch Snap keep the output finite in all four modes, and Soft Grain Edges lowers a roughness measure on a sine test (a measurement,

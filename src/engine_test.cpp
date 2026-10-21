@@ -278,6 +278,50 @@ int main()
         fails += ! ok;
     }
 
+    // --- A second real export: a morph between different waves (not a factory bank). The last wave is factory bank 7's
+    //     wave 16, which must come out bit-exact; every wave must survive the round trip to within rounding. ---
+    {
+        const std::string path = std::string (BEADS_TEST_DATA_DIR) + "/bank-07-braids-digital-and-metallic.wav";
+        std::ifstream f (path, std::ios::binary);
+        std::vector<uint8_t> bytes ((std::istreambuf_iterator<char> (f)), std::istreambuf_iterator<char>());
+        std::vector<int16_t> bank, pcm; std::string why;
+        const auto r = WavetableLoader::bankFromWav (bytes.data(), bytes.size(), bank);
+        // the file's own samples (16-bit mono PCM after the "data" chunk header)
+        for (size_t i = 12; i + 8 <= bytes.size();)
+        {
+            const uint32_t sz = (uint32_t) bytes[i + 4] | ((uint32_t) bytes[i + 5] << 8) | ((uint32_t) bytes[i + 6] << 16) | ((uint32_t) bytes[i + 7] << 24);
+            if (std::memcmp (&bytes[i], "data", 4) == 0)
+            {
+                for (size_t k = 0; k + 1 < sz && i + 9 + k < bytes.size(); k += 2) pcm.push_back ((int16_t) (bytes[i + 8 + k] | (bytes[i + 9 + k] << 8)));
+                break;
+            }
+            i += 8 + sz + (sz & 1);
+        }
+        const bool wellFormed = r.ok && storedBankIsWellFormed (bank, why) && pcm.size() == 4096;
+        int lastWaveMismatches = -1; double maxErr = 1e9;
+        if (wellFormed)
+        {
+            lastWaveMismatches = 0;
+            const int16_t* fac = BeadsEngine::factoryBank (6) + 15 * WavetableLoader::kStoredSize;
+            for (int i = 0; i < WavetableLoader::kStoredSize; ++i) lastWaveMismatches += bank[(size_t) 15 * WavetableLoader::kStoredSize + (size_t) i] != fac[i];
+            // stored waves back into file samples: slope of the stored table, rotated back by 3, scaled to the file's peak
+            maxErr = 0;
+            for (int k = 0; k < 16; ++k)
+                for (int j = 0; j < 256; ++j)
+                {
+                    const int m = (j + WavetableLoader::kExportRotation) % 256;
+                    const int16_t* t = &bank[(size_t) k * WavetableLoader::kStoredSize];
+                    const double back = (double) (t[m + 1] - t[m]) * 32112.0 / 512.0;
+                    maxErr = std::max (maxErr, std::fabs (back - (double) pcm[(size_t) k * 256 + (size_t) j]));
+                }
+        }
+        // one stored step is 62.7 file units, so rounding alone can be off by half of that
+        const bool ok = wellFormed && lastWaveMismatches == 0 && maxErr <= 32.0;
+        printf ("loader: custom morph export -> %s; last wave vs factory bank 7 wave 16: %d of %d values differ; largest difference after the round trip: %.1f of 32768 (rounding limit 31.4)  %s\n",
+                r.ok ? r.summary.c_str() : r.error.c_str(), lastWaveMismatches, WavetableLoader::kStoredSize, maxErr, ok ? "OK" : "FAIL");
+        fails += ! ok;
+    }
+
     // --- Generated test files: stored waves are well formed, and the wave positions land where they should ---
     {
         // one 2048-sample sine cycle with a Serum-style marker

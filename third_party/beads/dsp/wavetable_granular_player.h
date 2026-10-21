@@ -53,11 +53,15 @@ class WavetableGranularPlayer : public GranularPlayer<WavetableGrain, 32> {
       float amplitude, pan;
       ComputeGrainAmplitudeAndPan(trigger, p, &amplitude, &pan);
       
-#ifdef TEST
+// Plugin change: upstream prints here whenever TEST is defined, and this
+// library is built with TEST for desktop use. A printf on the audio thread is
+// not safe in a plugin, so it only runs if BEADS_PLUGIN_LOG_GRAIN_STEALING is
+// defined (never, by default).
+#ifdef BEADS_PLUGIN_LOG_GRAIN_STEALING
       if (!new_grain()->done()) {
         printf("stealing, duration = %d\n", new_grain()->remaining_samples());
       }
-#endif  // TEST
+#endif  // BEADS_PLUGIN_LOG_GRAIN_STEALING
 
       new_grain()->Start(
           bank,

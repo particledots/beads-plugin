@@ -2,15 +2,20 @@
 #include <algorithm>
 #include <cstring>
 #include "beads/dsp/processor.h"
+#include "beads/dsp/synth.h"
 #include "stmlib/utils/gate_flags.h"
 
-BeadsEngine::BeadsEngine() : proc (new beads::Processor())
+BeadsEngine::BeadsEngine() : proc (new beads::Processor()), synth (new beads::Synth())
 {
     delayBuf1.assign (512 * 1024, 0);
     delayBuf2.assign (256 * 1024, 0);
     reverbBuf.assign (32768, 0);
     uint8_t* bufs[3] = { delayBuf1.data(), delayBuf1.data() + 256 * 1024, delayBuf2.data() };
     proc->Init (bufs, reverbBuf.data());
+
+    // The synth has its own reverb (same size as the effect's), so the two never share memory.
+    synthReverbBuf.assign (32768, 0);
+    synth->Init (synthReverbBuf.data());
 }
 
 BeadsEngine::~BeadsEngine() = default;
@@ -19,7 +24,8 @@ void BeadsEngine::prepare (double sr)
 {
     hostRate = sr;
     curMedia = -1;                // force reconfigure
-    paramsApplied = false;        // the first process() call applies the host's Quality/Mono even if frozen
+    curSource = AudioIn;          // the first process() call applies the host's Source choice
+    paramsApplied = false;        // the first process() call applies the host's Quality/Mono/Source even if frozen
     configure (beads::Processor::MEDIA_DIGITAL, false);
 }
 
@@ -28,7 +34,13 @@ void BeadsEngine::configure (int media, bool mono)
     curMedia = media; curMono = mono;
     proc->Configure ((beads::Processor::Media) media, mono);   // also clears delay memory, as on the module
     proc->SetSoftEdges (curSoft);                              // Configure resets the grains to the default fades
-    procRate = (double) proc->sample_rate();
+    setupRates();
+}
+
+void BeadsEngine::setupRates()
+{
+    // The effect runs at the rate of the chosen Quality. The synth is fixed at 48 kHz (Synth::Init hard-codes it).
+    procRate = (curSource == WavetableSynth) ? 48000.0 : (double) proc->sample_rate();
     blockSize = (size_t) std::max (1.0, std::round (procRate / 4000.0));   // module's block rate is 4 kHz
     rsInL.init (hostRate, procRate);  rsInR.init (hostRate, procRate);
     rsOutL.init (procRate, hostRate); rsOutR.init (procRate, hostRate);
@@ -104,8 +116,18 @@ void BeadsEngine::runBlocks (const Params& p)
         }
         inQueueHead += B;
 
-        proc->Process (seedState, useGateInput ? seed.data() : nullptr, freeze.get(),
-                       d, prm, m, in.data(), out.data(), B);
+        if (curSource == WavetableSynth)
+        {
+            // In synth mode the module's Feedback knob picks the bank (quantised to 12 steps). We have a
+            // dedicated Bank parameter instead, so aim at the middle of that bank's step. Quality sets the bit depth.
+            m.feedback = ((float) std::clamp (p.bank, 0, kNumBanks - 1) + 0.5f) / (float) kNumBanks;
+            synth->Render (seedState, useGateInput ? seed.data() : nullptr, freeze.get(),
+                           (beads::Synth::Resolution) std::clamp (curMedia, 0, 3),
+                           d, prm, m, out.data(), B);   // audio input is not used in synth mode
+        }
+        else
+            proc->Process (seedState, useGateInput ? seed.data() : nullptr, freeze.get(),
+                           d, prm, m, in.data(), out.data(), B);
 
         for (size_t i = 0; i < B; ++i)
         {
@@ -129,9 +151,16 @@ void BeadsEngine::process (const float* inL, const float* inR, float* outL, floa
     if (p.softEdges != curSoft) { curSoft = p.softEdges; proc->SetSoftEdges (curSoft); }
 
     // Changing Quality or Mono clears the buffer, so while Freeze is on the change is held back
-    // (it applies once Freeze is released). The very first block always applies the saved settings.
-    if ((p.media != curMedia || p.mono != curMono) && (! p.freeze || ! paramsApplied))
-        configure (p.media, p.mono);
+    // (it applies once Freeze is released). Changing Source is held back the same way, so a frozen
+    // sound never changes underneath you. The very first block always applies the saved settings.
+    const bool mediaChanged  = p.media != curMedia || p.mono != curMono;
+    const bool sourceChanged = p.source != curSource;
+    if ((mediaChanged || sourceChanged) && (! p.freeze || ! paramsApplied))
+    {
+        curSource = p.source;
+        if (mediaChanged) configure (p.media, p.mono);   // also sets up the rates for the new Source
+        else              setupRates();                  // Source only: the effect's buffer is left untouched
+    }
     paramsApplied = true;
 
     // 1. host rate -> processor rate (gate flag is carried along by nearest-sample mapping)

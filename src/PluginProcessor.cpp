@@ -42,6 +42,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout BeadsAudioProcessor::createL
     // Added after 0.1.0, so they carry a higher version hint (keeps AU hosts happy with older sessions).
     p.push_back (std::make_unique<APB> (juce::ParameterID { "pitch_snap", 2 }, "Pitch Snap", false));
     p.push_back (std::make_unique<APB> (juce::ParameterID { "soft_edges", 2 }, "Soft Grain Edges", false));
+    // Synth mode (the module's idle wavetable oscillator + grains). Source defaults to the audio effect.
+    p.push_back (std::make_unique<APC> (juce::ParameterID { "source", 2 }, "Source",
+                 juce::StringArray { "Audio In", "Wavetable Synth" }, 0));
+    juce::StringArray banks;
+    for (int i = 1; i <= BeadsEngine::kNumBanks; ++i) banks.add (juce::String (i));
+    p.push_back (std::make_unique<APC> (juce::ParameterID { "bank", 2 }, "Wavetable Bank", banks, 0));
     return { p.begin(), p.end() };
 }
 
@@ -134,6 +140,8 @@ BeadsEngine::Params BeadsAudioProcessor::readParams() const
     p.mono = v ("mono") > 0.5f;
     p.pitchSnap = v ("pitch_snap") > 0.5f;
     p.softEdges = v ("soft_edges") > 0.5f;
+    p.source = (int) v ("source");
+    p.bank = (int) v ("bank");
     return p;
 }
 

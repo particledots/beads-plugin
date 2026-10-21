@@ -102,21 +102,39 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
     gateAtt    = std::make_unique<ComboAtt> (proc.apvts, "seed_mode", gateMode);
     qualityAtt = std::make_unique<ComboAtt> (proc.apvts, "media", quality);
 
-    for (auto* l : { &gateLabel, &qualityLabel })
+    source.addItemList ({ "Audio In", "Wavetable Synth" }, 1);
+    for (int i = 1; i <= BeadsEngine::kNumBanks; ++i) bank.addItem (juce::String (i), i);
+    addAndMakeVisible (source); addAndMakeVisible (bank);
+    sourceAtt = std::make_unique<ComboAtt> (proc.apvts, "source", source);
+    bankAtt   = std::make_unique<ComboAtt> (proc.apvts, "bank", bank);
+
+    for (auto* l : { &gateLabel, &qualityLabel, &sourceLabel, &bankLabel })
     {
         l->setJustificationType (juce::Justification::centredLeft);
         l->setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)));
         addAndMakeVisible (*l);
     }
 
-    // Quality and Mono changes are held back while Freeze is on (they would clear the frozen buffer),
-    // so show those two controls as unavailable meanwhile.
+    // In synth mode the Feedback knob does nothing (the module uses it to pick the bank, which has its own
+    // control here) and Bank only matters there.
+    sourceModeAtt = std::make_unique<juce::ParameterAttachment> (*proc.apvts.getParameter ("source"),
+        [this] (float v)
+        {
+            const bool synthMode = v > 0.5f;
+            feedback.slider.setEnabled (! synthMode);
+            bank.setEnabled (synthMode);
+        });
+    sourceModeAtt->sendInitialUpdate();
+
+    // Quality, Mono and Source changes are held back while Freeze is on (they would clear or change the frozen
+    // sound), so show those controls as unavailable meanwhile.
     freezeLockAtt = std::make_unique<juce::ParameterAttachment> (*proc.apvts.getParameter ("freeze"),
         [this] (float v)
         {
             const bool frozen = v > 0.5f;
             quality.setEnabled (! frozen);
             mono.setEnabled (! frozen);
+            source.setEnabled (! frozen);
         });
     freezeLockAtt->sendInitialUpdate();
 
@@ -199,5 +217,9 @@ void BeadsEditor::resized()
     // Row 4: extra options
     auto row4 = juce::Rectangle<int> (24, 490, W - 48, 40);
     snap.setBounds (row4.removeFromLeft (120)); row4.removeFromLeft (8);
-    softEdges.setBounds (row4.removeFromLeft (160));
+    softEdges.setBounds (row4.removeFromLeft (160)); row4.removeFromLeft (12);
+    sourceLabel.setBounds (row4.removeFromLeft (52));
+    source.setBounds (row4.removeFromLeft (124).reduced (0, 6)); row4.removeFromLeft (10);
+    bankLabel.setBounds (row4.removeFromLeft (38));
+    bank.setBounds (row4.removeFromLeft (60).reduced (0, 6));
 }

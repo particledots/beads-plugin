@@ -5,13 +5,17 @@
 #include <cstdint>
 #include "Resampler.h"
 
-namespace beads { class Processor; }
+namespace beads { class Processor; class Synth; }
 
 class BeadsEngine
 {
 public:
     enum Media { DirtyTape = 0, CleanTape = 1, VintageDigital = 2, Digital = 3 };
     enum SeedMode { FreeRun = 0, MidiGate = 1, Manual = 2 };
+    // AudioIn = the granular effect on the input. WavetableSynth = the module's idle mode
+    // (wavetable oscillator + wavetable grains); the audio input is ignored there.
+    enum Source { AudioIn = 0, WavetableSynth = 1 };
+    static constexpr int kNumBanks = 12;
 
     struct Params
     {
@@ -27,6 +31,8 @@ public:
         bool mono = false;
         bool pitchSnap = false;         // our addition: Pitch settles on musical intervals (see snapPitch)
         bool softEdges = false;         // our addition: longer minimum grain fades (see GrainEnvelope::SetSoftEdges)
+        int source = AudioIn;           // AudioIn or WavetableSynth
+        int bank = 0;                   // wavetable bank 0..11 (synth mode only; the module uses the Feedback knob for this)
     };
 
     BeadsEngine();
@@ -45,14 +51,17 @@ private:
     struct Frame { float l, r; uint8_t gate; };
 
     void configure (int media, bool mono);
+    void setupRates();        // processor rate, block size, resamplers and queues for the current media + source
     void runBlocks (const Params& p);
 
     std::unique_ptr<beads::Processor> proc;
+    std::unique_ptr<beads::Synth> synth;
     std::vector<uint8_t> delayBuf1, delayBuf2;
-    std::vector<uint16_t> reverbBuf;
+    std::vector<uint16_t> reverbBuf, synthReverbBuf;
 
     double hostRate = 48000.0, procRate = 48000.0;
     int curMedia = -1; bool curMono = false;
+    int curSource = AudioIn;
     bool curSoft = false;
     bool paramsApplied = false;   // false until the first block has applied the host's Quality/Mono
     size_t blockSize = 12;

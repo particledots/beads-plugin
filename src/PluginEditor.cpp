@@ -23,6 +23,9 @@ BeadsLookAndFeel::BeadsLookAndFeel()
     setColour (juce::PopupMenu::textColourId, kText);
     setColour (juce::PopupMenu::highlightedBackgroundColourId, kAccent);
     setColour (juce::PopupMenu::highlightedTextColourId, juce::Colours::black);
+    setColour (juce::TextButton::buttonColourId, kTrack);
+    setColour (juce::TextButton::textColourOffId, kText);
+    setColour (juce::TextButton::textColourOnId, kText);
 }
 
 void BeadsLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float pos,
@@ -138,10 +141,69 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
         });
     freezeLockAtt->sendInitialUpdate();
 
-    setSize (640, 548);
+    // Wavetable banks: load a WAV into the selected bank, or put the factory bank back.
+    for (auto* b : { &loadBank, &resetBank }) addAndMakeVisible (*b);
+    loadBank.onClick  = [this] { chooseWavetableFile(); };
+    resetBank.onClick = [this]
+    {
+        const int b = selectedBank();
+        proc.resetBank (b);
+        setStatus (b, "Bank " + juce::String (b + 1) + " is back to the factory wavetable.");
+    };
+    bankInfo.setJustificationType (juce::Justification::centredLeft);
+    bankInfo.setFont (juce::Font (juce::FontOptions (11.0f)));
+    bankInfo.setMinimumHorizontalScale (0.8f);
+    addAndMakeVisible (bankInfo);
+    refreshBankInfo();
+    startTimerHz (4);
+
+    setSize (640, 612);
 }
 
-BeadsEditor::~BeadsEditor() { setLookAndFeel (nullptr); }
+BeadsEditor::~BeadsEditor() { stopTimer(); setLookAndFeel (nullptr); }
+
+int BeadsEditor::selectedBank() const
+{
+    return juce::jlimit (0, BeadsEngine::kNumBanks - 1, (int) proc.apvts.getRawParameterValue ("bank")->load());
+}
+
+void BeadsEditor::setStatus (int forBank, const juce::String& text)
+{
+    statusBank = forBank;
+    statusText = text;
+    refreshBankInfo();
+}
+
+void BeadsEditor::refreshBankInfo()
+{
+    const int b = selectedBank();
+    if (statusText.isNotEmpty() && statusBank != b) statusText = {};      // the message belonged to another bank
+    const juce::String text = statusText.isNotEmpty() ? statusText
+                                                      : "Bank " + juce::String (b + 1) + ": " + proc.describeBank (b);
+    if (bankInfo.getText() != text) bankInfo.setText (text, juce::dontSendNotification);
+    resetBank.setEnabled (proc.isUserBank (b));
+}
+
+void BeadsEditor::timerCallback() { refreshBankInfo(); }
+
+void BeadsEditor::chooseWavetableFile()
+{
+    static juce::File lastFolder;
+    const int b = selectedBank();
+    chooser = std::make_unique<juce::FileChooser> ("Choose a wavetable (.wav) for bank " + juce::String (b + 1), lastFolder, "*.wav", true);
+    juce::Component::SafePointer<BeadsEditor> safe (this);
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [safe, b] (const juce::FileChooser& fc)
+        {
+            const auto f = fc.getResult();
+            if (f == juce::File()) return;                         // cancelled
+            lastFolder = f.getParentDirectory();
+            if (safe == nullptr) return;
+            juce::String message;
+            const bool ok = safe->proc.loadBankFromFile (b, f, message);
+            safe->setStatus (b, ok ? "Bank " + juce::String (b + 1) + " - " + message : "Couldn't load: " + message);
+        });
+}
 
 void BeadsEditor::addKnob (Knob& k, const juce::String& id, const juce::String& name, bool small)
 {
@@ -175,7 +237,7 @@ void BeadsEditor::paint (juce::Graphics& g)
     g.setColour (kPanel);
     g.fillRoundedRectangle (12.0f, 58.0f, (float) getWidth() - 24.0f, 232.0f, 10.0f);
     g.fillRoundedRectangle (12.0f, 298.0f, (float) getWidth() - 24.0f, 132.0f, 10.0f);
-    g.fillRoundedRectangle (12.0f, 438.0f, (float) getWidth() - 24.0f, 100.0f, 10.0f);
+    g.fillRoundedRectangle (12.0f, 438.0f, (float) getWidth() - 24.0f, 162.0f, 10.0f);
 }
 
 void BeadsEditor::resized()
@@ -222,4 +284,10 @@ void BeadsEditor::resized()
     source.setBounds (row4.removeFromLeft (124).reduced (0, 6)); row4.removeFromLeft (10);
     bankLabel.setBounds (row4.removeFromLeft (38));
     bank.setBounds (row4.removeFromLeft (60).reduced (0, 6));
+
+    // Row 5: wavetable banks (synth mode)
+    auto row5 = juce::Rectangle<int> (24, 536, W - 48, 56);
+    loadBank.setBounds (row5.removeFromLeft (150).withSizeKeepingCentre (150, 30)); row5.removeFromLeft (8);
+    resetBank.setBounds (row5.removeFromLeft (110).withSizeKeepingCentre (110, 30)); row5.removeFromLeft (12);
+    bankInfo.setBounds (row5);
 }

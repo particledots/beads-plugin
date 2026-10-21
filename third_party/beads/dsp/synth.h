@@ -56,6 +56,14 @@ class Synth {
   
   void Init(uint16_t* reverb_buffer);
   void Reset();
+
+  // Plugin addition: use this table instead of the built-in factory wavetables
+  // (12 banks x 16 waves x 260 int16 values). The pointer must stay valid for
+  // as long as the synth can play; the contents may change between blocks.
+  void SetWavetables(const int16_t* wavetables) {
+    wavetable_granular_player_.set_wavetables(wavetables);
+    wavetable_voice_.set_wavetables(wavetables);
+  }
   
   void Render(
       SeedButtonState seed_button_state,

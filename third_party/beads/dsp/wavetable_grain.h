@@ -111,7 +111,10 @@ class WavetableGrain : public Grain {
     remaining_samples_ = 0;
   }
   
+  // Plugin change: the table is passed in (it used to be the fixed wav_integrated_waves array)
+  // so each plugin instance can hold its own wavetables.
   inline void Start(
+      const int16_t* wavetables,
       int bank,
       int bit_shift,
       float wave,
@@ -126,7 +129,7 @@ class WavetableGrain : public Grain {
 
     wave_integral_ = wave_integral;
     wave_fractional_ = wave_fractional;
-    wave_start_ = wav_integrated_waves + \
+    wave_start_ = wavetables + \
         (bank * kNumWavesPerTable + wave_integral_) * (kTableSize + 4);
     
     frequency = std::min(frequency, 0.25f);

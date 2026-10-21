@@ -46,7 +46,11 @@ class WavetableVoice {
  public:
   WavetableVoice() { }
   ~WavetableVoice() { }
-  
+
+  // Plugin addition: the wavetables can be pointed at a per-instance copy
+  // (12 banks x 16 waves x 260 values, same layout as wav_integrated_waves).
+  void set_wavetables(const int16_t* wavetables) { wavetables_ = wavetables; }
+
   void Init(float sample_rate) {
     phase_ = 0.0f;
     root_note_ = kWavetableRootNote / sample_rate;
@@ -108,7 +112,7 @@ class WavetableVoice {
       
       MAKE_INTEGRAL_FRACTIONAL(wave);
       
-      const int16_t* wave_start = wav_integrated_waves + \
+      const int16_t* wave_start = wavetables_ + \
           (wave_integral + bank_ * kNumWavesPerTable) * (kTableSize + 4);
       
       const float p = phase_ * float(kTableSize);
@@ -151,7 +155,9 @@ class WavetableVoice {
   float lp_2_;
   float previous_;
   float wave_lp_;
-  
+
+  const int16_t* wavetables_ = wav_integrated_waves;
+
   int bank_;
   int next_bank_;
   int xfade_counter_;

@@ -3,6 +3,7 @@
 #include <cstring>
 #include "beads/dsp/processor.h"
 #include "beads/dsp/synth.h"
+#include "beads/resources.h"
 #include "stmlib/utils/gate_flags.h"
 
 BeadsEngine::BeadsEngine() : proc (new beads::Processor()), synth (new beads::Synth())
@@ -16,6 +17,43 @@ BeadsEngine::BeadsEngine() : proc (new beads::Processor()), synth (new beads::Sy
     // The synth has its own reverb (same size as the effect's), so the two never share memory.
     synthReverbBuf.assign (32768, 0);
     synth->Init (synthReverbBuf.data());
+
+    // Each plugin instance plays from its own copy of the factory banks so a bank can be replaced.
+    static_assert (WavetableLoader::kBankValues * kNumBanks == WAV_INTEGRATED_WAVES_SIZE, "wavetable layout changed");
+    wavetables.assign (beads::wav_integrated_waves, beads::wav_integrated_waves + WAV_INTEGRATED_WAVES_SIZE);
+    synth->SetWavetables (wavetables.data());
+}
+
+const int16_t* BeadsEngine::factoryBank (int bank)
+{
+    return beads::wav_integrated_waves + (size_t) std::clamp (bank, 0, kNumBanks - 1) * WavetableLoader::kBankValues;
+}
+
+void BeadsEngine::queueBank (int bank, const int16_t* bankData)
+{
+    if (bank < 0 || bank >= kNumBanks || bankData == nullptr) return;
+    std::lock_guard<std::mutex> lock (pendingMutex);
+    std::copy (bankData, bankData + WavetableLoader::kBankValues, pending[(size_t) bank].data.begin());
+    pending[(size_t) bank].dirty = true;
+}
+
+void BeadsEngine::queueFactoryBank (int bank)
+{
+    queueBank (bank, factoryBank (bank));
+}
+
+// Audio thread. try_lock never waits: if the message thread is mid-write, the bank simply arrives one block later.
+void BeadsEngine::applyPendingBanks()
+{
+    std::unique_lock<std::mutex> lock (pendingMutex, std::try_to_lock);
+    if (! lock.owns_lock()) return;
+    for (int b = 0; b < kNumBanks; ++b)
+    {
+        auto& p = pending[(size_t) b];
+        if (! p.dirty) continue;
+        std::copy (p.data.begin(), p.data.end(), wavetables.begin() + (std::ptrdiff_t) b * WavetableLoader::kBankValues);
+        p.dirty = false;
+    }
 }
 
 BeadsEngine::~BeadsEngine() = default;
@@ -149,6 +187,7 @@ void BeadsEngine::process (const float* inL, const float* inR, float* outL, floa
                            int n, const Params& p, const uint8_t* gate)
 {
     if (p.softEdges != curSoft) { curSoft = p.softEdges; proc->SetSoftEdges (curSoft); }
+    applyPendingBanks();
 
     // Changing Quality or Mono clears the buffer, so while Freeze is on the change is held back
     // (it applies once Freeze is released). Changing Source is held back the same way, so a frozen

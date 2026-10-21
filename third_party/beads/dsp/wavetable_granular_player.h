@@ -41,7 +41,10 @@ class WavetableGranularPlayer : public GranularPlayer<WavetableGrain, 32> {
  public:
   WavetableGranularPlayer() { }
   ~WavetableGranularPlayer() { }
-  
+
+  // Plugin addition: see WavetableVoice::set_wavetables.
+  void set_wavetables(const int16_t* wavetables) { wavetables_ = wavetables; }
+
   inline void Render(
       int bank,
       int bit_shift,
@@ -64,6 +67,7 @@ class WavetableGranularPlayer : public GranularPlayer<WavetableGrain, 32> {
 #endif  // BEADS_PLUGIN_LOG_GRAIN_STEALING
 
       new_grain()->Start(
+          wavetables_,
           bank,
           bit_shift,
           p.time.value(),
@@ -84,6 +88,8 @@ class WavetableGranularPlayer : public GranularPlayer<WavetableGrain, 32> {
   }
 
  private:
+  const int16_t* wavetables_ = wav_integrated_waves;
+
   DISALLOW_COPY_AND_ASSIGN(WavetableGranularPlayer);
 };
 

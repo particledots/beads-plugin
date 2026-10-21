@@ -12,7 +12,7 @@ public:
     void drawToggleButton (juce::Graphics&, juce::ToggleButton&, bool highlighted, bool down) override;
 };
 
-class BeadsEditor : public juce::AudioProcessorEditor
+class BeadsEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
     explicit BeadsEditor (BeadsAudioProcessor&);
@@ -21,6 +21,12 @@ public:
     void resized() override;
 
 private:
+    void timerCallback() override;
+    int selectedBank() const;
+    void chooseWavetableFile();
+    void setStatus (int forBank, const juce::String& text);
+    void refreshBankInfo();
+
     using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
     using ComboAtt  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
@@ -46,6 +52,11 @@ private:
     juce::ComboBox gateMode, quality, source, bank;
     juce::Label gateLabel { {}, "GRAIN GATE" }, qualityLabel { {}, "QUALITY" },
                 sourceLabel { {}, "SOURCE" }, bankLabel { {}, "BANK" };
+    juce::TextButton loadBank { "LOAD WAVETABLE..." }, resetBank { "RESET BANK" };
+    juce::Label bankInfo;
+    juce::String statusText;            // result of the last Load, shown until the Bank selection changes
+    int statusBank = -1;
+    std::unique_ptr<juce::FileChooser> chooser;
     std::unique_ptr<ButtonAtt> freezeAtt, seedAtt, monoAtt, snapAtt, softEdgesAtt;
     std::unique_ptr<ComboAtt> gateAtt, qualityAtt, sourceAtt, bankAtt;
     std::unique_ptr<juce::ParameterAttachment> sourceModeAtt;   // Feedback is unused and Bank is used only in synth mode

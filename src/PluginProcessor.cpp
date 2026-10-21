@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <cstring>
 
 using APF = juce::AudioParameterFloat;
 using APB = juce::AudioParameterBool;
@@ -191,16 +192,116 @@ juce::AudioProcessorEditor* BeadsAudioProcessor::createEditor()
     return new BeadsEditor (*this);
 }
 
+bool BeadsAudioProcessor::loadBankFromFile (int bank, const juce::File& file, juce::String& message)
+{
+    if (bank < 0 || bank >= BeadsEngine::kNumBanks) { message = "There is no such bank."; return false; }
+    if (! file.existsAsFile())                      { message = "That file doesn't exist."; return false; }
+    if (file.getSize() > 64 * 1024 * 1024)          { message = "That file is too large (over 64 MB)."; return false; }
+
+    juce::MemoryBlock bytes;
+    if (! file.loadFileAsData (bytes)) { message = "The file couldn't be read."; return false; }
+
+    std::vector<int16_t> data;
+    const auto r = WavetableLoader::bankFromWav (static_cast<const uint8_t*> (bytes.getData()), bytes.getSize(), data);
+    if (! r.ok) { message = juce::String (r.error); return false; }
+
+    {
+        const juce::ScopedLock sl (bankLock);
+        auto& u = userBanks[(size_t) bank];
+        u.loaded = true; u.name = file.getFileName(); u.data = data;
+    }
+    engine.queueBank (bank, data.data());
+    message = "Loaded " + file.getFileName() + ": " + juce::String (r.summary).upToFirstOccurrenceOf (" (", false, false);
+    return true;
+}
+
+void BeadsAudioProcessor::resetBank (int bank)
+{
+    if (bank < 0 || bank >= BeadsEngine::kNumBanks) return;
+    {
+        const juce::ScopedLock sl (bankLock);
+        userBanks[(size_t) bank] = UserBank();
+    }
+    engine.queueFactoryBank (bank);
+}
+
+bool BeadsAudioProcessor::isUserBank (int bank) const
+{
+    const juce::ScopedLock sl (bankLock);
+    return bank >= 0 && bank < BeadsEngine::kNumBanks && userBanks[(size_t) bank].loaded;
+}
+
+juce::String BeadsAudioProcessor::describeBank (int bank) const
+{
+    const juce::ScopedLock sl (bankLock);
+    if (bank >= 0 && bank < BeadsEngine::kNumBanks && userBanks[(size_t) bank].loaded)
+        return "User: " + userBanks[(size_t) bank].name;
+    return "Factory";
+}
+
+// The banks you load are saved inside the host project (as base64 inside the plugin state), so a Logic
+// project keeps working if the original WAV files move or are deleted. Each bank is about 11 KB.
 void BeadsAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
+    auto state = apvts.copyState();
+    for (int i = state.getNumChildren(); --i >= 0;)
+        if (state.getChild (i).hasType ("USERBANK")) state.removeChild (i, nullptr);
+
+    {
+        const juce::ScopedLock sl (bankLock);
+        for (int b = 0; b < BeadsEngine::kNumBanks; ++b)
+        {
+            const auto& u = userBanks[(size_t) b];
+            if (! u.loaded || u.data.size() != (size_t) WavetableLoader::kBankValues) continue;
+            juce::ValueTree vt ("USERBANK");
+            vt.setProperty ("bank", b, nullptr);
+            vt.setProperty ("name", u.name, nullptr);
+            vt.setProperty ("data", juce::Base64::toBase64 (u.data.data(), u.data.size() * sizeof (int16_t)), nullptr);
+            state.appendChild (vt, nullptr);
+        }
+    }
+    if (auto xml = state.createXml()) copyXmlToBinary (*xml, dest);
 }
 
 void BeadsAudioProcessor::setStateInformation (const void* data, int size)
 {
-    if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+    auto xml = getXmlFromBinary (data, size);
+    if (xml == nullptr || ! xml->hasTagName (apvts.state.getType())) return;
+
+    auto vt = juce::ValueTree::fromXml (*xml);
+    std::array<UserBank, 12> incoming;
+    for (int i = vt.getNumChildren(); --i >= 0;)
+    {
+        auto child = vt.getChild (i);
+        if (! child.hasType ("USERBANK")) continue;
+        const int b = child.getProperty ("bank", -1);
+        juce::MemoryOutputStream decoded;
+        if (b >= 0 && b < BeadsEngine::kNumBanks
+            && juce::Base64::convertFromBase64 (decoded, child.getProperty ("data").toString())
+            && decoded.getDataSize() == (size_t) WavetableLoader::kBankValues * sizeof (int16_t))
+        {
+            auto& u = incoming[(size_t) b];
+            u.loaded = true;
+            u.name = child.getProperty ("name").toString();
+            u.data.resize ((size_t) WavetableLoader::kBankValues);
+            std::memcpy (u.data.data(), decoded.getData(), decoded.getDataSize());
+        }
+        vt.removeChild (i, nullptr);       // keep the parameter state free of our extra nodes
+    }
+    apvts.replaceState (vt);
+
+    // Banks that are not in the saved state go back to factory.
+    {
+        const juce::ScopedLock sl (bankLock);
+        userBanks = std::move (incoming);
+    }
+    for (int b = 0; b < BeadsEngine::kNumBanks; ++b)
+    {
+        const juce::ScopedLock sl (bankLock);
+        const auto& u = userBanks[(size_t) b];
+        if (u.loaded) engine.queueBank (b, u.data.data());
+        else          engine.queueFactoryBank (b);
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new BeadsAudioProcessor(); }

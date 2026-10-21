@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "BeadsEngine.h"
 
@@ -34,7 +35,18 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    // --- Wavetable banks for synth mode ---
+    // Replace wavetable bank `bank` (0..11) with the contents of a WAV file. `message` says what happened either way.
+    bool loadBankFromFile (int bank, const juce::File& file, juce::String& message);
+    void resetBank (int bank);                    // back to the factory bank
+    bool isUserBank (int bank) const;
+    juce::String describeBank (int bank) const;   // "Factory" or "User: file name"
+
 private:
+    struct UserBank { bool loaded = false; juce::String name; std::vector<int16_t> data; };
+    mutable juce::CriticalSection bankLock;       // guards userBanks (message thread only touches them; the audio thread never does)
+    std::array<UserBank, 12> userBanks;
+
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     BeadsEngine::Params readParams() const;
 

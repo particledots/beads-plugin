@@ -37,6 +37,7 @@ juce_add_plugin(Beads
 # --- DSP core: vendored Beads/stmlib code + our JUCE-free wrapper, built with plain flags ---
 add_library(beads_core STATIC
   src/BeadsEngine.cpp
+  src/WavetableLoader.cpp
   third_party/beads/dsp/processor.cc
   third_party/beads/dsp/synth.cc
   third_party/beads/dsp/mu_law.cc
@@ -68,3 +69,4 @@ target_link_libraries(Beads PRIVATE
 # --- Headless test of the DSP wrapper:  cmake --build build --target engine_test && build/engine_test ---
 add_executable(engine_test EXCLUDE_FROM_ALL src/engine_test.cpp)
 target_link_libraries(engine_test PRIVATE beads_core)
+target_compile_definitions(engine_test PRIVATE BEADS_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")

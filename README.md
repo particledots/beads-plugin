@@ -41,6 +41,7 @@ Headless DSP test (any OS): `cmake --build build --target engine_test && build/e
 | Mono | mono/stereo buffer (also held back while Freeze is on) |
 | Source | **Audio In** = the granular effect on the input (default). **Wavetable Synth** = the module's idle mode: a wavetable oscillator plus wavetable grains, with the audio input ignored. Grain Gate, Density, Time/Size/Shape/Pitch, Dry/Wet (oscillator vs grains), Reverb and Freeze all work in both. Held back while Freeze is on, like Quality |
 | Wavetable Bank | 1–12, synth mode only. The module picks the bank with the Feedback knob in this mode; the plugin has a dedicated control instead, and Feedback is greyed out in synth mode. Time sweeps through the 16 waves of the bank. In synth mode Quality sets the bit depth (Dirty tape = 4-bit, Clean tape = 16/6-bit, Vintage digital = 7-bit, Digital = 16-bit) |
+| Load wavetable... / Reset bank | Replaces the selected bank with a WAV file, or puts the factory bank back. See "Loading your own wavetables" below |
 | Pitch Snap | **Our addition, off by default.** Pitch settles on unison, semitone, minor/major third, fifth and octaves when within a quarter of a semitone; free everywhere else |
 | Soft Grain Edges | **Our addition, off by default.** Lengthens the shortest grain fades (0.5 ms in / 10 ms out becomes 4 ms in / 20 ms out) to smooth the ticks from very short, hard-edged grains. Applies to grains started after you switch it |
 
@@ -58,8 +59,29 @@ Headless DSP test (any OS): `cmake --build build --target engine_test && build/e
 * Synth mode (added Oct 2026) runs the module's own `Synth` code at its fixed 48 kHz, whatever the Quality setting, through the same
   resampler. The oscillator's pitch is relative to C3 (130.81 Hz) plus the Pitch knob; MIDI notes do not set pitch yet. Quality maps to the
   synth's bit depth in the module's order, which is my reading of the code and **not checked against hardware**.
-* The wavetables are the 12 factory banks, compiled in (`resources.cc`: 12 banks x 16 waves x 256 samples, stored as running totals).
-  User-loadable banks are not implemented.
+* The wavetables start as the 12 factory banks, compiled in (`resources.cc`: 12 banks x 16 waves x 256 samples, stored as running totals).
+  Each plugin instance plays from its own copy, so a loaded bank only affects that instance.
+
+## Loading your own wavetables
+
+In synth mode, pick a Bank (1-12), press **Load wavetable...** and choose a `.wav`. That bank is replaced until you press **Reset bank**.
+Loaded banks are saved inside the Logic project (about 11 KB each), so the project still works if the WAV moves or is deleted.
+The change takes effect within one audio block; a note or grain that is sounding at that moment may click once.
+
+What the loader accepts:
+* 16/24/32-bit integer or 32-bit float WAV, mono or stereo (channels are averaged).
+* A Serum-style cycle-length marker (the `clm ` chunk, which GrainKontrol writes) sets the cycle length. Without one: exactly 4096 samples
+  = 16 cycles of 256; a multiple of 2048 = cycles of 2048; a multiple of 256 = cycles of 256; a short file = one cycle.
+* Cycles of any other length are resampled to 256 samples without aliasing (rebuilt from their harmonics). If the file holds more or fewer
+  than 16 cycles, the 16 waves are spread evenly through it with cross-fades between neighbours.
+* Each wave has its DC removed and its peak set to the level the factory waves use. A silent or flat file is refused with a message.
+* Not supported: compressed WAV (ADPCM, MP3-in-WAV), files over 64 MB, cycle lengths under 8 or over 65536 samples.
+
+**Verified:** the bank exported from GrainKontrol as factory bank 12 (`tests/data/bank-12-fm-8-1.wav`) loads into exactly the table
+values the firmware stores for that bank (all 4160 match), and played from slot 12 it is sample-for-sample identical to the factory bank.
+That is the same format check as the headless test (`engine_test`). **Not verified:** how banks made from other WAVs sound compared with
+the hardware or with GrainKontrol's own playback; only this one export was available to check the file layout against. The exporter's
+3-sample rotation and the zero-mean centring were worked out from that file and the factory table, not from GrainKontrol's source.
 * Verified here: the VST3 builds on Linux (Oct 2026 changes included); the DSP wrapper runs at 44.1/48/96 kHz in all four modes with finite
   output; dry-path noise floor around -72 dB; the Freeze lock holds a Quality change back and applies it on release; Soft Grain Edges
   and Pitch Snap keep the output finite in all four modes, and Soft Grain Edges lowers a roughness measure on a sine test (a measurement,
@@ -79,5 +101,5 @@ Headless DSP test (any OS): `cmake --build build --target engine_test && build/e
 
 `third_party/` is MIT-licensed code by Emilie Gillet (copyright notices kept in the file headers; `third_party/stmlib/LICENSE`).
 Keep those notices if you redistribute. `THIRD-PARTY-LICENSES.txt` (also copied into the downloadable zip) carries the MIT text.
-Five small files under `third_party/beads/dsp/` were extended with a `SetSoftEdges` option (marked "Plugin addition" in the source), and `wavetable_granular_player.h` has its debug `printf` switched off (marked "Plugin change"). The hardware design is CC-BY-SA; none of it is used here. The wrapper code in `src/` has
+Five small files under `third_party/beads/dsp/` were extended with a `SetSoftEdges` option (marked "Plugin addition" in the source). `wavetable_granular_player.h` has its debug `printf` switched off, and the wavetable voice, grain, player and `synth.h` read their wavetables from a settable pointer instead of the fixed array (all marked "Plugin addition" / "Plugin change"). `tests/data/bank-12-fm-8-1.wav` is a test file derived from the MIT-licensed factory wavetables. The hardware design is CC-BY-SA; none of it is used here. The wrapper code in `src/` has
 no licence assigned yet. JUCE is used under its own licence terms (AGPLv3 / commercial); check them before distributing builds.

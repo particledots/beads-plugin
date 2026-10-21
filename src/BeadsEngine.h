@@ -1,9 +1,12 @@
 // JUCE-free wrapper around the Mutable Instruments Beads DSP (MIT licensed, Emilie Gillet).
 #pragma once
+#include <array>
 #include <memory>
+#include <mutex>
 #include <vector>
 #include <cstdint>
 #include "Resampler.h"
+#include "WavetableLoader.h"
 
 namespace beads { class Processor; class Synth; }
 
@@ -47,6 +50,17 @@ public:
     int latencyInHostSamples() const;
     double processorRate() const { return procRate; }
 
+    // --- Wavetable banks (synth mode) ---
+    // Replace one bank (0..11) with 16 waves in the stored form (WavetableLoader::kBankValues values).
+    // Safe to call from the message thread while audio runs: the new data waits in a side buffer and is
+    // copied in at the start of the next audio block (no allocation, no blocking on the audio thread).
+    void queueBank (int bank, const int16_t* bankData);
+    // Put one factory bank back.
+    void queueFactoryBank (int bank);
+    // The table the synth is playing right now (12 banks x kBankValues). For tests; call from the audio thread's side only.
+    const int16_t* currentWavetables() const { return wavetables.data(); }
+    static const int16_t* factoryBank (int bank);
+
 private:
     struct Frame { float l, r; uint8_t gate; };
 
@@ -58,6 +72,14 @@ private:
     std::unique_ptr<beads::Synth> synth;
     std::vector<uint8_t> delayBuf1, delayBuf2;
     std::vector<uint16_t> reverbBuf, synthReverbBuf;
+
+    // The synth's wavetables: its own copy of the 12 factory banks, never resized, so the pointers the
+    // synth keeps stay valid. Banks replaced from the UI wait in `pending` until the audio thread picks them up.
+    std::vector<int16_t> wavetables;
+    struct PendingBank { bool dirty = false; std::array<int16_t, WavetableLoader::kBankValues> data {}; };
+    std::array<PendingBank, 12> pending;
+    std::mutex pendingMutex;
+    void applyPendingBanks();
 
     double hostRate = 48000.0, procRate = 48000.0;
     int curMedia = -1; bool curMono = false;

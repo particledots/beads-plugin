@@ -118,6 +118,18 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
     addAndMakeVisible (snapMode);
     snapAtt = std::make_unique<ComboAtt> (proc.apvts, "pitch_snap_mode", snapMode);
     snapMode.setTooltip ("What the Pitch knob settles on. Steps = octaves and fifths (0, 7, 12, 19, 24 ... up to 48, both directions); Semitones = whole semitones.");
+    // The Pitch readout shows the note that actually plays: with Pitch Snap on it shows the snapped value
+    // (a whole number of semitones), not the raw knob position.
+    pitch.slider.textFromValueFunction = [this] (double v)
+    {
+        const int mode = (int) proc.apvts.getRawParameterValue ("pitch_snap_mode")->load();
+        if (mode == BeadsEngine::SnapOff) return juce::String (v, 2);
+        const int st = (int) std::lround (BeadsEngine::snapPitch ((float) v, mode));
+        return st > 0 ? "+" + juce::String (st) : juce::String (st);
+    };
+    snapReadoutAtt = std::make_unique<juce::ParameterAttachment> (*proc.apvts.getParameter ("pitch_snap_mode"),
+                                                                  [this] (float) { pitch.slider.updateText(); });
+    snapReadoutAtt->sendInitialUpdate();
     pitchScale.addItem ("Off", 1);
     for (int i = 0; i < Scales::kNumScales; ++i) pitchScale.addItem (Scales::kScales[i].name, i + 2);
     addAndMakeVisible (pitchScale);

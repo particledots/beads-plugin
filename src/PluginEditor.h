@@ -59,6 +59,7 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
     std::unique_ptr<ButtonAtt> freezeAtt, seedAtt, monoAtt, softEdgesAtt, midiPitchAtt, droneAtt;
     std::unique_ptr<ComboAtt> gateAtt, qualityAtt, sourceAtt, bankAtt, scaleAtt, snapAtt;
+    std::unique_ptr<juce::ParameterAttachment> snapReadoutAtt;  // keeps the Pitch readout in step with the Pitch Snap menu
     std::unique_ptr<juce::ParameterAttachment> sourceModeAtt;   // Feedback is unused and Bank is used only in synth mode
     std::unique_ptr<juce::ParameterAttachment> freezeLockAtt;   // greys out Quality/Mono/Source while frozen (declared last)
 

@@ -41,7 +41,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout BeadsAudioProcessor::createL
                  juce::StringArray { "Dirty tape", "Clean tape", "Vintage digital", "Digital" }, 3));
     p.push_back (std::make_unique<APB> (juce::ParameterID { "mono", 1 }, "Mono", false));
     // Added after 0.1.0, so they carry a higher version hint (keeps AU hosts happy with older sessions).
-    p.push_back (std::make_unique<APB> (juce::ParameterID { "pitch_snap", 2 }, "Pitch Snap", false));
+    // Pitch Snap used to be an on/off switch ("pitch_snap"); it is now a three-way menu under a new ID.
+    p.push_back (std::make_unique<APC> (juce::ParameterID { "pitch_snap_mode", 5 }, "Pitch Snap",
+                 juce::StringArray { "Off", "Steps", "Semitones" }, 0));
     p.push_back (std::make_unique<APB> (juce::ParameterID { "soft_edges", 2 }, "Soft Grain Edges", false));
     // Synth mode (the module's idle wavetable oscillator + grains). Source defaults to the audio effect.
     p.push_back (std::make_unique<APC> (juce::ParameterID { "source", 2 }, "Source",
@@ -146,7 +148,7 @@ BeadsEngine::Params BeadsAudioProcessor::readParams() const
     p.seedButton = v ("seed") > 0.5f;
     p.media = (int) v ("media");
     p.mono = v ("mono") > 0.5f;
-    p.pitchSnap = v ("pitch_snap") > 0.5f;
+    p.pitchSnap = (int) v ("pitch_snap_mode");
     p.softEdges = v ("soft_edges") > 0.5f;
     p.source = (int) v ("source");
     p.bank = (int) v ("bank");

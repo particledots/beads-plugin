@@ -147,7 +147,7 @@ int main()
     {
         BeadsEngine e; e.prepare (48000.0);
         BeadsEngine::Params p; p.media = media; p.density = 0.9f; p.dryWet = 0.5f; p.size = 0.2f;
-        p.softEdges = true; p.pitchSnap = true; p.pitchSemitones = 12.1f;
+        p.softEdges = true; p.pitchSnap = BeadsEngine::SnapSteps; p.pitchSemitones = 12.1f;
         const int N = 512; std::vector<float> in (N), out (N), outR (N);
         double phase = 0, energy = 0; bool bad = false;
         for (int b = 0; b < 600; ++b)
@@ -670,6 +670,60 @@ int main()
         printf ("pitch scale: jumps land on scale notes (all 28 scales, 3 bases, 3 mod settings) %s, reach several notes %s, Off stays continuous %s, engine finite %s  %s\n",
                 ok ? "yes" : "NO", spread ? "yes" : "NO", offContinuous ? "yes" : "NO", finiteOk ? "yes" : "NO", all ? "OK" : "FAIL");
         fails += ! all;
+    }
+
+    // =========================== Pitch Snap (Pitch knob) ===========================
+    {
+        // oscillator frequency (zero crossings, host 48 kHz) for a knob value and snap mode
+        auto freq = [] (float knob, int mode)
+        {
+            BeadsEngine e; e.prepare (48000.0);
+            BeadsEngine::Params p; p.source = BeadsEngine::WavetableSynth; p.bank = 0; p.dryWet = 0.0f; p.reverb = 0.0f;
+            p.pitchSemitones = knob; p.pitchSnap = mode;
+            std::vector<float> in (480, 0.f), l (480), r (480), all;
+            for (int b = 0; b < 60; ++b) { e.process (in.data(), in.data(), l.data(), r.data(), 480, p, nullptr); all.insert (all.end(), l.begin(), l.end()); }
+            int c = 0; for (size_t i = all.size() / 2 + 1; i < all.size(); ++i) c += (all[i - 1] < 0.f && all[i] >= 0.f);
+            return c * 48000.0 / (double) (all.size() - all.size() / 2);
+        };
+        const double base = freq (0.f, BeadsEngine::SnapOff);
+        auto semisOf = [&] (float knob, int mode) { return 12.0 * std::log2 (freq (knob, mode) / base); };
+        struct Case { float knob; int mode; double expect; };
+        const Case cases[] = {
+            { 11.8f, BeadsEngine::SnapSteps, 12 },   { 4.0f, BeadsEngine::SnapSteps, 7 },    { 3.0f, BeadsEngine::SnapSteps, 0 },
+            { -9.0f, BeadsEngine::SnapSteps, -7 },   { -10.0f, BeadsEngine::SnapSteps, -12 }, { 21.0f, BeadsEngine::SnapSteps, 19 },
+            { 30.0f, BeadsEngine::SnapSteps, 31 },   { 35.0f, BeadsEngine::SnapSteps, 36 },   { -34.0f, BeadsEngine::SnapSteps, -36 },
+            { 4.4f, BeadsEngine::SnapSemitones, 4 }, { 4.6f, BeadsEngine::SnapSemitones, 5 }, { -2.6f, BeadsEngine::SnapSemitones, -3 },
+            { 4.4f, BeadsEngine::SnapOff, 4.4 },
+        };
+        bool ok = base > 20;
+        double worst = 0;
+        for (const auto& c : cases)
+        {
+            const double got = semisOf (c.knob, c.mode);
+            if (std::fabs (got - c.expect) >= 0.12) printf ("  snap case knob %.1f mode %d expected %.2f got %.3f\n", c.knob, c.mode, c.expect, got);
+            worst = std::max (worst, std::fabs (got - c.expect));
+            ok = ok && std::fabs (got - c.expect) < 0.12;
+        }
+        // exact check of the snapping function over the whole knob range, 0.01 st apart
+        {
+            static const float steps[] = { 0, 7, 12, 19, 24, 31, 36, 43, 48 };
+            bool exact = true;
+            for (int i = -4800; i <= 4800; ++i)
+            {
+                const float k = (float) i * 0.01f;
+                const float st = BeadsEngine::snapPitch (k, BeadsEngine::SnapSteps);
+                float bestDist = 1e9f; for (float s : steps) bestDist = std::min (bestDist, std::fabs (std::fabs (k) - s));
+                exact = exact && std::fabs (std::fabs (st) - std::fabs (k)) <= bestDist + 1e-4f && (st == 0.f || (st < 0.f) == (k < 0.f))
+                              && std::fabs (BeadsEngine::snapPitch (k, BeadsEngine::SnapSemitones) - std::round (k)) < 1e-6f
+                              && BeadsEngine::snapPitch (k, BeadsEngine::SnapOff) == k;
+                bool onStep = false; for (float s : steps) onStep = onStep || std::fabs (std::fabs (st) - s) < 1e-6f;
+                exact = exact && onStep;
+            }
+            printf ("pitch snap: function exact over -48..+48 (Steps are only 0,7,12,19,24,31,36,43,48 either side; Semitones round; Off unchanged)  %s\n", exact ? "OK" : "FAIL");
+            fails += ! exact;
+        }
+        printf ("pitch snap: %d knob positions (Steps / Semitones / Off) land on the expected pitch; worst error %.3f semitones  %s\n", (int) (sizeof (cases) / sizeof (cases[0])), worst, ok ? "OK" : "FAIL");
+        fails += ! ok;
     }
 
     // =========================== NoteTracker ===========================

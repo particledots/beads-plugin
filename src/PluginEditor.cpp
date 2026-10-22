@@ -92,11 +92,10 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
     addKnob (dryWet,   "dry_wet",  "DRY/WET",  false);
     addKnob (reverb,   "reverb",   "REVERB",   false);
 
-    for (auto* b : { &freeze, &seed, &mono, &snap, &softEdges, &midiPitch, &drone }) addAndMakeVisible (*b);
+    for (auto* b : { &freeze, &seed, &mono, &softEdges, &midiPitch, &drone }) addAndMakeVisible (*b);
     freezeAtt = std::make_unique<ButtonAtt> (proc.apvts, "freeze", freeze);
     seedAtt   = std::make_unique<ButtonAtt> (proc.apvts, "seed", seed);
     monoAtt   = std::make_unique<ButtonAtt> (proc.apvts, "mono", mono);
-    snapAtt   = std::make_unique<ButtonAtt> (proc.apvts, "pitch_snap", snap);
     softEdgesAtt = std::make_unique<ButtonAtt> (proc.apvts, "soft_edges", softEdges);
     midiPitchAtt = std::make_unique<ButtonAtt> (proc.apvts, "midi_pitch", midiPitch);
     droneAtt     = std::make_unique<ButtonAtt> (proc.apvts, "drone", drone);
@@ -115,13 +114,17 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
     sourceAtt = std::make_unique<ComboAtt> (proc.apvts, "source", source);
     bankAtt   = std::make_unique<ComboAtt> (proc.apvts, "bank", bank);
 
+    snapMode.addItemList ({ "Off", "Steps", "Semitones" }, 1);
+    addAndMakeVisible (snapMode);
+    snapAtt = std::make_unique<ComboAtt> (proc.apvts, "pitch_snap_mode", snapMode);
+    snapMode.setTooltip ("What the Pitch knob settles on. Steps = octaves and fifths (0, 7, 12, 19, 24 ... up to 48, both directions); Semitones = whole semitones.");
     pitchScale.addItem ("Off", 1);
     for (int i = 0; i < Scales::kNumScales; ++i) pitchScale.addItem (Scales::kScales[i].name, i + 2);
     addAndMakeVisible (pitchScale);
     scaleAtt = std::make_unique<ComboAtt> (proc.apvts, "pitch_scale", pitchScale);
     pitchScale.setTooltip ("The random pitch jumps from the Pitch mod knob land only on notes of this scale, built on the note being played (or the Pitch knob if no note).");
 
-    for (auto* l : { &gateLabel, &qualityLabel, &sourceLabel, &bankLabel, &scaleLabel })
+    for (auto* l : { &gateLabel, &qualityLabel, &sourceLabel, &bankLabel, &scaleLabel, &snapLabel })
     {
         l->setJustificationType (juce::Justification::centredLeft);
         l->setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)));
@@ -290,12 +293,13 @@ void BeadsEditor::resized()
 
     // Row 4: extra options
     auto row4 = juce::Rectangle<int> (24, 490, W - 48, 40);
-    snap.setBounds (row4.removeFromLeft (120)); row4.removeFromLeft (8);
-    softEdges.setBounds (row4.removeFromLeft (160)); row4.removeFromLeft (12);
-    sourceLabel.setBounds (row4.removeFromLeft (52));
-    source.setBounds (row4.removeFromLeft (124).reduced (0, 6)); row4.removeFromLeft (10);
-    bankLabel.setBounds (row4.removeFromLeft (38));
-    bank.setBounds (row4.removeFromLeft (60).reduced (0, 6));
+    snapLabel.setBounds (row4.removeFromLeft (72));
+    snapMode.setBounds (row4.removeFromLeft (100).reduced (0, 6)); row4.removeFromLeft (6);
+    softEdges.setBounds (row4.removeFromLeft (150)); row4.removeFromLeft (10);
+    sourceLabel.setBounds (row4.removeFromLeft (48));
+    source.setBounds (row4.removeFromLeft (110).reduced (0, 6)); row4.removeFromLeft (6);
+    bankLabel.setBounds (row4.removeFromLeft (34));
+    bank.setBounds (row4.removeFromLeft (54).reduced (0, 6));
 
     // Row 5: wavetable banks (synth mode)
     auto row5 = juce::Rectangle<int> (24, 536, W - 48, 44);

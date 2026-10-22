@@ -48,17 +48,17 @@ private:
     Knob density, feedback, dryWet, reverb;
 
     juce::ToggleButton freeze { "FREEZE" }, seed { "SEED" }, mono { "MONO" };
-    juce::ToggleButton snap { "PITCH SNAP" }, softEdges { "SOFT GRAIN EDGES" }, midiPitch { "MIDI PITCH" }, drone { "DRONE" };
-    juce::ComboBox gateMode, quality, source, bank, pitchScale;
+    juce::ToggleButton softEdges { "SOFT GRAIN EDGES" }, midiPitch { "MIDI PITCH" }, drone { "DRONE" };
+    juce::ComboBox gateMode, quality, source, bank, pitchScale, snapMode;
     juce::Label gateLabel { {}, "GRAIN GATE" }, qualityLabel { {}, "QUALITY" },
-                sourceLabel { {}, "SOURCE" }, bankLabel { {}, "BANK" }, scaleLabel { {}, "PITCH SCALE" };
+                sourceLabel { {}, "SOURCE" }, bankLabel { {}, "BANK" }, scaleLabel { {}, "PITCH SCALE" }, snapLabel { {}, "PITCH SNAP" };
     juce::TextButton loadBank { "LOAD WAVETABLE..." }, resetBank { "RESET BANK" };
     juce::Label bankInfo;
     juce::String statusText;            // result of the last Load, shown until the Bank selection changes
     int statusBank = -1;
     std::unique_ptr<juce::FileChooser> chooser;
-    std::unique_ptr<ButtonAtt> freezeAtt, seedAtt, monoAtt, snapAtt, softEdgesAtt, midiPitchAtt, droneAtt;
-    std::unique_ptr<ComboAtt> gateAtt, qualityAtt, sourceAtt, bankAtt, scaleAtt;
+    std::unique_ptr<ButtonAtt> freezeAtt, seedAtt, monoAtt, softEdgesAtt, midiPitchAtt, droneAtt;
+    std::unique_ptr<ComboAtt> gateAtt, qualityAtt, sourceAtt, bankAtt, scaleAtt, snapAtt;
     std::unique_ptr<juce::ParameterAttachment> sourceModeAtt;   // Feedback is unused and Bank is used only in synth mode
     std::unique_ptr<juce::ParameterAttachment> freezeLockAtt;   // greys out Quality/Mono/Source while frozen (declared last)
 

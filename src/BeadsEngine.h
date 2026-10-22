@@ -19,6 +19,8 @@ public:
     // AudioIn = the granular effect on the input. WavetableSynth = the module's idle mode
     // (wavetable oscillator + wavetable grains); the audio input is ignored there.
     enum Source { AudioIn = 0, WavetableSynth = 1 };
+    // Pitch knob snapping: Steps = octaves and fifths, Semitones = whole semitones.
+    enum PitchSnap { SnapOff = 0, SnapSteps = 1, SnapSemitones = 2 };
     // Scale for the random pitch jumps (our addition): 0 = off, 1..28 = Scales::kScales (Scales.h). Built on the base
     // pitch, i.e. the Pitch knob plus the played note.
     enum PitchScale { ScaleOff = 0, ScaleMajor = 1, ScaleMinor = 6 /* Aeolian */ };
@@ -36,7 +38,7 @@ public:
         int seedMode = FreeRun;
         int media = Digital;
         bool mono = false;
-        bool pitchSnap = false;         // our addition: Pitch settles on musical intervals (see snapPitch)
+        int pitchSnap = SnapOff;        // our addition: what the Pitch knob settles on (see snapPitch)
         bool softEdges = false;         // our addition: longer minimum grain fades (see GrainEnvelope::SetSoftEdges)
         int source = AudioIn;           // AudioIn or WavetableSynth
         int bank = 0;                   // wavetable bank 0..11 (synth mode only; the module uses the Feedback knob for this)
@@ -54,6 +56,9 @@ public:
     // `gate` may be null (no MIDI gate). If non-null it holds one flag per host sample.
     void process (const float* inL, const float* inR, float* outL, float* outR,
                   int numSamples, const Params& p, const uint8_t* gate);
+
+    // Pitch Snap applied to the Pitch knob value (semitones). Public so the test can check every step exactly.
+    static float snapPitch (float semitones, int mode);
 
     int latencyInHostSamples() const;
     double processorRate() const { return procRate; }

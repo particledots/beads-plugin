@@ -98,17 +98,19 @@ int BeadsEngine::latencyInHostSamples() const
     return (int) std::ceil (procFrames * hostRate / procRate);
 }
 
-// Our own addition (not from the Beads firmware): when on, the Pitch value settles on a musical interval
-// if it is within a quarter of a semitone of one, and is left alone everywhere else.
-static float snapPitch (float semitones, bool enabled)
+// Our own addition (not from the Beads firmware): Pitch Snap on the Pitch knob.
+//  Steps     - the knob lands on octaves and fifths across its whole +-48 range (0, +-7, +-12, +-19, +-24, +-31, +-36, +-43, +-48)
+//  Semitones - the knob lands on whole semitones
+float BeadsEngine::snapPitch (float semitones, int mode)
 {
-    if (! enabled) return semitones;
-    static const float kDetents[] = { 0.f, 1.f, 3.f, 4.f, 7.f, 12.f, 24.f, 36.f, 48.f };   // unison, semitone, minor/major third, fifth, octaves
+    if (mode == SnapSemitones) return std::round (semitones);
+    if (mode != SnapSteps) return semitones;
+    static const float kSteps[] = { 0.f, 7.f, 12.f, 19.f, 24.f, 31.f, 36.f, 43.f, 48.f };   // mirrored below zero
     const float a = std::fabs (semitones);
-    for (float d : kDetents)
-        if (std::fabs (a - d) < 0.25f)
-            return semitones < 0.f ? -d : d;
-    return semitones;
+    float best = kSteps[0];
+    for (float d : kSteps)
+        if (std::fabs (a - d) < std::fabs (a - best)) best = d;
+    return semitones < 0.f ? -best : best;
 }
 
 void BeadsEngine::runBlocks (const Params& p)

@@ -123,7 +123,10 @@ void BeadsEngine::runBlocks (const Params& p)
     setp (prm.time,  p.time,  p.timeMod);
     setp (prm.size,  p.size,  p.sizeMod);
     setp (prm.shape, p.shape, p.shapeMod);
-    setp (prm.pitch, snapPitch (p.pitchSemitones, p.pitchSnap), p.pitchMod);
+    float pitch = snapPitch (p.pitchSemitones, p.pitchSnap);
+    if (curSource == WavetableSynth)
+        pitch = std::clamp (pitch + p.midiPitchOffset, -100.0f, 100.0f);   // the pitch tables end at +-127 semitones
+    setp (prm.pitch, pitch, p.pitchMod);
     prm.monophonic_mode = false;
 
     ModulatedParameter d; d.base = p.density; d.cv = 0.0f;
@@ -156,6 +159,15 @@ void BeadsEngine::runBlocks (const Params& p)
 
         if (curSource == WavetableSynth)
         {
+            // Drone off: the oscillator fades in while any note is held and out when all are up. Grains are untouched.
+            bool noteHeld = false;
+            for (size_t i = 0; i < B; ++i) noteHeld = noteHeld || inQueue[inQueueHead - B + i].gate != 0;
+            const float target = (p.droneOn || noteHeld) ? 1.0f : 0.0f;
+            const double blockSeconds = (double) B / procRate;
+            const float coef = (float) (1.0 - std::exp (-blockSeconds / (target > oscLevel ? 0.003 : 0.050)));   // 3 ms in, 50 ms out
+            oscLevel += (target - oscLevel) * coef;
+            synth->SetOscillatorLevel (oscLevel);
+
             // In synth mode the module's Feedback knob picks the bank (quantised to 12 steps). We have a
             // dedicated Bank parameter instead, so aim at the middle of that bank's step. Quality sets the bit depth.
             m.feedback = ((float) std::clamp (p.bank, 0, kNumBanks - 1) + 0.5f) / (float) kNumBanks;
@@ -197,6 +209,7 @@ void BeadsEngine::process (const float* inL, const float* inR, float* outL, floa
     if ((mediaChanged || sourceChanged) && (! p.freeze || ! paramsApplied))
     {
         curSource = p.source;
+        oscLevel = p.droneOn ? 1.0f : 0.0f;
         if (mediaChanged) configure (p.media, p.mono);   // also sets up the rates for the new Source
         else              setupRates();                  // Source only: the effect's buffer is left untouched
     }

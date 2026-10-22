@@ -41,6 +41,8 @@ Headless DSP test (any OS): `cmake --build build --target engine_test && build/e
 | Mono | mono/stereo buffer (also held back while Freeze is on) |
 | Source | **Audio In** = the granular effect on the input (default). **Wavetable Synth** = the module's idle mode: a wavetable oscillator plus wavetable grains, with the audio input ignored. Grain Gate, Density, Time/Size/Shape/Pitch, Dry/Wet (oscillator vs grains), Reverb and Freeze all work in both. Held back while Freeze is on, like Quality |
 | Wavetable Bank | 1–12, synth mode only. The module picks the bank with the Feedback knob in this mode; the plugin has a dedicated control instead, and Feedback is greyed out in synth mode. Time sweeps through the 16 waves of the bank. In synth mode Quality sets the bit depth (Dirty tape = 4-bit, Clean tape = 16/6-bit, Vintage digital = 7-bit, Digital = 16-bit) |
+| MIDI Pitch | **Our addition, on by default, synth mode only.** MIDI notes set the oscillator's pitch: note 48 (C3) plays the oscillator's own pitch (130.81 Hz) and the Pitch knob is added on top, one semitone per key. Last-note priority (the most recent key still held; when all keys are up the pitch stays on the last note). Pitch changes are applied once per audio buffer, so a very large buffer makes note changes slightly less tight. The module does this with its V/oct input |
+| Drone | **Our addition, off by default, synth mode only.** Off = the oscillator only sounds while a MIDI note is held (3 ms fade in, 50 ms fade out). On = the oscillator sounds all the time, as the module's idle mode does. Drone does not touch the grains: they follow Grain Gate as before. Note that in synth mode Dry/Wet blends the oscillator (dry) with the grains (wet), so at 100% wet you hear grains only |
 | Load wavetable... / Reset bank | Replaces the selected bank with a WAV file, or puts the factory bank back. See "Loading your own wavetables" below |
 | Pitch Snap | **Our addition, off by default.** Pitch settles on unison, semitone, minor/major third, fifth and octaves when within a quarter of a semitone; free everywhere else |
 | Soft Grain Edges | **Our addition, off by default.** Lengthens the shortest grain fades (0.5 ms in / 10 ms out becomes 4 ms in / 20 ms out) to smooth the ticks from very short, hard-edged grains. Applies to grains started after you switch it |
@@ -57,7 +59,7 @@ Headless DSP test (any OS): `cmake --build build --target engine_test && build/e
 * The host's CV inputs are not modelled; the module's CV and attenuverter logic is reached only through the "Mod" parameters
   (no CV, internal randomness). The assignable CV input, gate-output mode, calibration, and the pot/UI code are left out.
 * Synth mode (added Oct 2026) runs the module's own `Synth` code at its fixed 48 kHz, whatever the Quality setting, through the same
-  resampler. The oscillator's pitch is relative to C3 (130.81 Hz) plus the Pitch knob; MIDI notes do not set pitch yet. Quality maps to the
+  resampler. The oscillator's pitch is C3 (130.81 Hz) plus the Pitch knob plus, with MIDI Pitch on, the held MIDI note (see the table). The total is limited to +-100 semitones. Quality maps to the
   synth's bit depth in the module's order, which is my reading of the code and **not checked against hardware**.
 * The wavetables start as the 12 factory banks, compiled in (`resources.cc`: 12 banks x 16 waves x 256 samples, stored as running totals).
   Each plugin instance plays from its own copy, so a loaded bank only affects that instance.
@@ -90,7 +92,7 @@ worked out from these files and the factory table, not from GrainKontrol's sourc
   and Pitch Snap keep the output finite in all four modes, and Soft Grain Edges lowers a roughness measure on a sine test (a measurement,
   not a listening test). Synth mode (headless test): makes sound from silent input, finite and bounded, at 44.1/48/96 kHz in all four
   Quality settings; all 12 banks are audible and differ from each other; switching Source back and forth keeps working and is held back
-  while frozen. **Not verified:** the AU build, loading in Logic, MIDI-gate behaviour in a real host, how the presets sound,
+  while frozen. MIDI Pitch and Drone (headless test): +12 semitones doubles the oscillator frequency and +7 gives the equal-tempered fifth (measured by zero crossings); extreme offsets stay finite; with Drone off the oscillator is silent with no note, sounds while one is held and fades out after release without a click larger than its normal waveform step; Drone off leaves fully-wet grains audible. **Not verified:** MIDI Pitch and Drone in Logic, the AU build, loading in Logic, MIDI-gate behaviour in a real host, how the presets sound,
   how synth mode sounds or whether it matches the hardware's idle mode, whether Pitch Snap feels right, and how closely anything sounds
   like the hardware. No A/B against a module was possible.
 * Observed, not explained: in the original audio mode, Dirty tape and Clean tape give no wet output at all with Dry/Wet fully up and the

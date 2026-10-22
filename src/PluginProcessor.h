@@ -2,6 +2,7 @@
 #include <array>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "BeadsEngine.h"
+#include "NoteTracker.h"
 
 class BeadsAudioProcessor : public juce::AudioProcessor
 {
@@ -53,7 +54,7 @@ private:
     BeadsEngine engine;
     std::vector<uint8_t> gateFlags;
     std::vector<float> scratchL, scratchR;
-    int heldNotes = 0;
+    NoteTracker notes;
     int currentProgram = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BeadsAudioProcessor)

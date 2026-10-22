@@ -65,6 +65,11 @@ class Synth {
     wavetable_voice_.set_wavetables(wavetables);
   }
   
+  // Plugin addition: scales the continuous oscillator (the "dry" side of Dry/Wet)
+  // without touching the grains. 1 = as on the module. Smoothed within each block;
+  // the caller is expected to move it gradually.
+  void SetOscillatorLevel(float level) { oscillator_level_ = level; }
+  
   void Render(
       SeedButtonState seed_button_state,
       const stmlib::GateFlags* seed_input,
@@ -81,6 +86,7 @@ class Synth {
   
   float dry_;
   float wet_;
+  float oscillator_level_ = 1.0f;
   
   Reverb reverb_;
   Limiter pre_reverb_limiter_;

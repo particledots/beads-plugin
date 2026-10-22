@@ -49,6 +49,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout BeadsAudioProcessor::createL
     juce::StringArray banks;
     for (int i = 1; i <= BeadsEngine::kNumBanks; ++i) banks.add (juce::String (i));
     p.push_back (std::make_unique<APC> (juce::ParameterID { "bank", 2 }, "Wavetable Bank", banks, 0));
+    // Synth mode: MIDI notes set the oscillator's pitch (on by default); Drone keeps the oscillator sounding with no note held (off by default).
+    p.push_back (std::make_unique<APB> (juce::ParameterID { "midi_pitch", 3 }, "MIDI Pitch", true));
+    p.push_back (std::make_unique<APB> (juce::ParameterID { "drone", 3 }, "Drone", false));
     return { p.begin(), p.end() };
 }
 
@@ -123,7 +126,7 @@ void BeadsAudioProcessor::prepareToPlay (double sr, int maxBlock)
     gateFlags.assign ((size_t) maxBlock, 0);
     scratchL.assign ((size_t) maxBlock, 0.f);
     scratchR.assign ((size_t) maxBlock, 0.f);
-    heldNotes = 0;
+    notes.reset();
     setLatencySamples (engine.latencyInHostSamples());
 }
 
@@ -143,6 +146,7 @@ BeadsEngine::Params BeadsAudioProcessor::readParams() const
     p.softEdges = v ("soft_edges") > 0.5f;
     p.source = (int) v ("source");
     p.bank = (int) v ("bank");
+    p.droneOn = v ("drone") > 0.5f;
     return p;
 }
 
@@ -159,30 +163,34 @@ void BeadsAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
     const auto params = readParams();
 
-    // MIDI notes -> grain gate (high while any note is held), sample-accurate.
-    const uint8_t* gate = nullptr;
-    if (params.seedMode == BeadsEngine::MidiGate)
+    // MIDI notes are always tracked: held notes give the gate (sample-accurate); in synth mode the most recent
+    // held note also sets the oscillator pitch (applied per audio buffer) and, with Drone off, lets it sound.
+    int pos = 0;
+    for (const auto meta : midi)
     {
-        int pos = 0;
-        for (const auto meta : midi)
-        {
-            const auto msg = meta.getMessage();
-            const int at = juce::jlimit (0, n, meta.samplePosition);
-            for (; pos < at; ++pos) gateFlags[(size_t) pos] = heldNotes > 0 ? 1 : 0;
-            if (msg.isNoteOn()) ++heldNotes;
-            else if (msg.isNoteOff()) heldNotes = juce::jmax (0, heldNotes - 1);
-            else if (msg.isAllNotesOff() || msg.isAllSoundOff()) heldNotes = 0;
-        }
-        for (; pos < n; ++pos) gateFlags[(size_t) pos] = heldNotes > 0 ? 1 : 0;
-        gate = gateFlags.data();
+        const auto msg = meta.getMessage();
+        const int at = juce::jlimit (0, n, meta.samplePosition);
+        for (; pos < at; ++pos) gateFlags[(size_t) pos] = notes.held() ? 1 : 0;
+        if (msg.isNoteOn()) notes.noteOn (msg.getNoteNumber());
+        else if (msg.isNoteOff()) notes.noteOff (msg.getNoteNumber());
+        else if (msg.isAllNotesOff() || msg.isAllSoundOff()) notes.allOff();
     }
-    else heldNotes = 0;
+    for (; pos < n; ++pos) gateFlags[(size_t) pos] = notes.held() ? 1 : 0;
     midi.clear();
+
+    // Grains follow the gate only in "MIDI gate" mode; the oscillator follows it when Drone is off.
+    auto engineParams = params;
+    const bool synthMode = params.source == BeadsEngine::WavetableSynth;
+    if (synthMode && notes.current() >= 0 && apvts.getRawParameterValue ("midi_pitch")->load() > 0.5f)
+        engineParams.midiPitchOffset = (float) (notes.current() - 48);   // note 48 (C3) = the oscillator's own pitch
+    const uint8_t* gate = gateFlags.data();
+    if (params.seedMode != BeadsEngine::MidiGate && ! (synthMode && ! params.droneOn))
+        gate = nullptr;
 
     const float* inL = buffer.getReadPointer (0);
     const float* inR = buffer.getReadPointer (chans > 1 ? 1 : 0);
     // copy input first; engine writes to scratch, then back (works in-place)
-    engine.process (inL, inR, scratchL.data(), scratchR.data(), n, params, gate);
+    engine.process (inL, inR, scratchL.data(), scratchR.data(), n, engineParams, gate);
     buffer.copyFrom (0, 0, scratchL.data(), n);
     if (chans > 1) buffer.copyFrom (1, 0, scratchR.data(), n);
 }

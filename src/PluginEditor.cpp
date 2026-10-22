@@ -92,12 +92,16 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
     addKnob (dryWet,   "dry_wet",  "DRY/WET",  false);
     addKnob (reverb,   "reverb",   "REVERB",   false);
 
-    for (auto* b : { &freeze, &seed, &mono, &snap, &softEdges }) addAndMakeVisible (*b);
+    for (auto* b : { &freeze, &seed, &mono, &snap, &softEdges, &midiPitch, &drone }) addAndMakeVisible (*b);
     freezeAtt = std::make_unique<ButtonAtt> (proc.apvts, "freeze", freeze);
     seedAtt   = std::make_unique<ButtonAtt> (proc.apvts, "seed", seed);
     monoAtt   = std::make_unique<ButtonAtt> (proc.apvts, "mono", mono);
     snapAtt   = std::make_unique<ButtonAtt> (proc.apvts, "pitch_snap", snap);
     softEdgesAtt = std::make_unique<ButtonAtt> (proc.apvts, "soft_edges", softEdges);
+    midiPitchAtt = std::make_unique<ButtonAtt> (proc.apvts, "midi_pitch", midiPitch);
+    droneAtt     = std::make_unique<ButtonAtt> (proc.apvts, "drone", drone);
+    midiPitch.setTooltip ("Synth mode: MIDI notes set the oscillator pitch (C3 = the Pitch knob's own pitch).");
+    drone.setTooltip ("Synth mode: on = the oscillator always sounds; off = only while a MIDI note is held.");
 
     gateMode.addItemList ({ "Free-run", "MIDI gate", "Manual" }, 1);
     quality.addItemList ({ "Dirty tape", "Clean tape", "Vintage digital", "Digital" }, 1);
@@ -126,6 +130,8 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
             const bool synthMode = v > 0.5f;
             feedback.slider.setEnabled (! synthMode);
             bank.setEnabled (synthMode);
+            midiPitch.setEnabled (synthMode);
+            drone.setEnabled (synthMode);
         });
     sourceModeAtt->sendInitialUpdate();
 
@@ -157,7 +163,7 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
     refreshBankInfo();
     startTimerHz (4);
 
-    setSize (640, 612);
+    setSize (640, 656);
 }
 
 BeadsEditor::~BeadsEditor() { stopTimer(); setLookAndFeel (nullptr); }
@@ -237,7 +243,7 @@ void BeadsEditor::paint (juce::Graphics& g)
     g.setColour (kPanel);
     g.fillRoundedRectangle (12.0f, 58.0f, (float) getWidth() - 24.0f, 232.0f, 10.0f);
     g.fillRoundedRectangle (12.0f, 298.0f, (float) getWidth() - 24.0f, 132.0f, 10.0f);
-    g.fillRoundedRectangle (12.0f, 438.0f, (float) getWidth() - 24.0f, 162.0f, 10.0f);
+    g.fillRoundedRectangle (12.0f, 438.0f, (float) getWidth() - 24.0f, 206.0f, 10.0f);
 }
 
 void BeadsEditor::resized()
@@ -286,8 +292,13 @@ void BeadsEditor::resized()
     bank.setBounds (row4.removeFromLeft (60).reduced (0, 6));
 
     // Row 5: wavetable banks (synth mode)
-    auto row5 = juce::Rectangle<int> (24, 536, W - 48, 56);
+    auto row5 = juce::Rectangle<int> (24, 536, W - 48, 44);
     loadBank.setBounds (row5.removeFromLeft (150).withSizeKeepingCentre (150, 30)); row5.removeFromLeft (8);
     resetBank.setBounds (row5.removeFromLeft (110).withSizeKeepingCentre (110, 30)); row5.removeFromLeft (12);
     bankInfo.setBounds (row5);
+
+    // Row 6: synth-mode playing options
+    auto row6 = juce::Rectangle<int> (24, 590, W - 48, 40);
+    midiPitch.setBounds (row6.removeFromLeft (130)); row6.removeFromLeft (8);
+    drone.setBounds (row6.removeFromLeft (100));
 }

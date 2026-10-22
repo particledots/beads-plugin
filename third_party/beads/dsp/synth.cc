@@ -98,7 +98,7 @@ void Synth::Render(
   const float post_gain_dry = 0.5f; // To get a 10Vpp output for the dry osc.
   const float post_gain_wet = 1.0f;
   const float dry_wet = mix_parameters.dry_wet;
-  const float dry = (1.0f - dry_wet) * (1.0f + dry_wet) * post_gain_dry;
+  const float dry = (1.0f - dry_wet) * (1.0f + dry_wet) * post_gain_dry * oscillator_level_;
   const float wet = dry_wet * (2.0f - dry_wet) * post_gain_wet;
   
   stmlib::ParameterInterpolator dry_modulation(

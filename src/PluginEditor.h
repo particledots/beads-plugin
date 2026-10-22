@@ -48,7 +48,7 @@ private:
     Knob density, feedback, dryWet, reverb;
 
     juce::ToggleButton freeze { "FREEZE" }, seed { "SEED" }, mono { "MONO" };
-    juce::ToggleButton snap { "PITCH SNAP" }, softEdges { "SOFT GRAIN EDGES" };
+    juce::ToggleButton snap { "PITCH SNAP" }, softEdges { "SOFT GRAIN EDGES" }, midiPitch { "MIDI PITCH" }, drone { "DRONE" };
     juce::ComboBox gateMode, quality, source, bank;
     juce::Label gateLabel { {}, "GRAIN GATE" }, qualityLabel { {}, "QUALITY" },
                 sourceLabel { {}, "SOURCE" }, bankLabel { {}, "BANK" };
@@ -57,7 +57,7 @@ private:
     juce::String statusText;            // result of the last Load, shown until the Bank selection changes
     int statusBank = -1;
     std::unique_ptr<juce::FileChooser> chooser;
-    std::unique_ptr<ButtonAtt> freezeAtt, seedAtt, monoAtt, snapAtt, softEdgesAtt;
+    std::unique_ptr<ButtonAtt> freezeAtt, seedAtt, monoAtt, snapAtt, softEdgesAtt, midiPitchAtt, droneAtt;
     std::unique_ptr<ComboAtt> gateAtt, qualityAtt, sourceAtt, bankAtt;
     std::unique_ptr<juce::ParameterAttachment> sourceModeAtt;   // Feedback is unused and Bank is used only in synth mode
     std::unique_ptr<juce::ParameterAttachment> freezeLockAtt;   // greys out Quality/Mono/Source while frozen (declared last)

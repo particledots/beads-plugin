@@ -1,5 +1,6 @@
 // Offline sanity test of BeadsEngine at several host sample rates / media modes.
 #include "BeadsEngine.h"
+#include "NoteTracker.h"
 #include "WavetableLoader.h"
 #include <cstdio>
 #include <cmath>
@@ -500,6 +501,129 @@ int main()
         printf ("engine banks: runs repeat exactly %s; export loaded into slot 12 plays identically to factory %s; a different bank differs by %.3f; "
                 "other slots touched: %d; after restore wrong values: %d  %s\n",
                 deterministic ? "yes" : "NO", sameAsFactory ? "yes" : "NO", replacedDiff, othersChanged, restoredWrong, ok ? "OK" : "FAIL");
+        fails += ! ok;
+    }
+
+    // =========================== MIDI pitch + Drone ===========================
+    {
+        // One engine, oscillator only (Dry/Wet 0, no reverb). gatePattern gives the gate per 480-sample block.
+        struct Run { std::vector<float> out; std::vector<int> blockStart; };
+        auto run = [] (BeadsEngine& e, BeadsEngine::Params p, const std::vector<uint8_t>& gatePattern, std::vector<float>& out)
+        {
+            const int N = 480;
+            std::vector<float> silence ((size_t) N, 0.f), l ((size_t) N), r ((size_t) N);
+            std::vector<uint8_t> g ((size_t) N, 0);
+            for (uint8_t gv : gatePattern)
+            {
+                std::fill (g.begin(), g.end(), gv);
+                e.process (silence.data(), silence.data(), l.data(), r.data(), N, p, g.data());
+                out.insert (out.end(), l.begin(), l.end());
+            }
+        };
+        auto rms = [] (const std::vector<float>& v, size_t a, size_t b)
+        {
+            double e = 0; for (size_t i = a; i < b; ++i) e += (double) v[i] * v[i];
+            return std::sqrt (e / (double) std::max<size_t> (1, b - a));
+        };
+        auto freqOf = [] (const std::vector<float>& v, size_t a, size_t b)   // upward zero crossings per second at 48 kHz
+        {
+            int c = 0; for (size_t i = a + 1; i < b; ++i) c += (v[i - 1] < 0.f && v[i] >= 0.f);
+            return c * 48000.0 / (double) (b - a);
+        };
+
+        BeadsEngine::Params base; base.source = BeadsEngine::WavetableSynth; base.bank = 0; base.dryWet = 0.0f; base.reverb = 0.0f; base.droneOn = true;
+        const std::vector<uint8_t> always (60, 1);
+
+        // pitch: +12 semitones doubles the oscillator frequency, +7 gives 2^(7/12)
+        double f0 = 0, f12 = 0, f7 = 0;
+        for (int k = 0; k < 3; ++k)
+        {
+            BeadsEngine e; e.prepare (48000.0);
+            auto p = base; p.midiPitchOffset = k == 0 ? 0.f : (k == 1 ? 12.f : 7.f);
+            std::vector<float> out; run (e, p, always, out);
+            const double f = freqOf (out, out.size() / 2, out.size());
+            (k == 0 ? f0 : (k == 1 ? f12 : f7)) = f;
+        }
+        const bool pitchOk = f0 > 20 && std::fabs (f12 / f0 - 2.0) < 0.03 && std::fabs (f7 / f0 - std::pow (2.0, 7.0 / 12.0)) < 0.03;
+        printf ("midi pitch: 0 st %.1f Hz, +12 st %.1f Hz (ratio %.3f), +7 st %.1f Hz (ratio %.3f)  %s\n", f0, f12, f12 / f0, f7, f7 / f0, pitchOk ? "OK" : "FAIL");
+        fails += ! pitchOk;
+
+        // extreme offsets stay finite
+        bool finiteOk = true;
+        for (float off : { -127.f, -60.f, 60.f, 127.f })
+        {
+            BeadsEngine e; e.prepare (48000.0);
+            auto p = base; p.midiPitchOffset = off; p.pitchSemitones = 48.f;
+            std::vector<float> out; run (e, p, always, out);
+            for (float x : out) finiteOk = finiteOk && std::isfinite (x) && std::fabs (x) < 8.f;
+        }
+        printf ("midi pitch: extreme offsets finite and bounded  %s\n", finiteOk ? "OK" : "FAIL");
+        fails += ! finiteOk;
+
+        // drone off: silent without a note; sounds while held; fades out after release
+        {
+            BeadsEngine e; e.prepare (48000.0);
+            auto p = base; p.droneOn = false;
+            std::vector<uint8_t> pat (20, 0);                 // 20 blocks no note
+            pat.insert (pat.end (), 40, 1);                   // 40 blocks note held
+            pat.insert (pat.end (), 40, 0);                   // 40 blocks released
+            std::vector<float> out; run (e, p, pat, out);
+            const size_t B = 480;
+            const double before = rms (out, 5 * B, 20 * B);
+            const double held = rms (out, 40 * B, 60 * B);
+            const double after = rms (out, 90 * B, 100 * B);
+            // click check: largest sample-to-sample step across the note-on and note-off transitions vs the steady-state step
+            auto maxStep = [&] (size_t a, size_t b) { double m = 0; for (size_t i = a + 1; i < b; ++i) m = std::max (m, (double) std::fabs (out[i] - out[i - 1])); return m; };
+            const double steadyStep = maxStep (40 * B, 60 * B);
+            const double onStep = maxStep (19 * B, 24 * B), offStep = maxStep (59 * B, 80 * B);
+            const bool ok = before < 1e-4 && held > 1e-3 && after < 1e-3 && onStep < 2.0 * steadyStep + 1e-3 && offStep < 2.0 * steadyStep + 1e-3;
+            printf ("drone off: rms before note %.5f, held %.4f, after release %.5f; max step on %.4f off %.4f (steady %.4f)  %s\n",
+                    before, held, after, onStep, offStep, steadyStep, ok ? "OK" : "FAIL");
+            fails += ! ok;
+        }
+
+        // drone on: sounds with no note held at all
+        {
+            BeadsEngine e; e.prepare (48000.0);
+            std::vector<float> out; run (e, base, std::vector<uint8_t> (40, 0), out);
+            const double level = rms (out, 20 * 480, out.size());
+            const bool ok = level > 1e-3;
+            printf ("drone on: rms with no note %.4f  %s\n", level, ok ? "OK" : "FAIL");
+            fails += ! ok;
+        }
+
+        // drone off leaves the grains alone: fully wet, seed locked (free-run), still sounds with no note
+        {
+            BeadsEngine e; e.prepare (48000.0);
+            auto p = base; p.droneOn = false; p.dryWet = 1.0f; p.seedMode = BeadsEngine::FreeRun; p.density = 1.0f; p.time = 0.5f;
+            std::vector<float> out; run (e, p, std::vector<uint8_t> (100, 0), out);
+            const double level = rms (out, 40 * 480, out.size());
+            const bool ok = level > 1e-3;
+            printf ("drone off, fully wet free-run grains: rms %.4f  %s\n", level, ok ? "OK" : "FAIL");
+            fails += ! ok;
+        }
+    }
+
+    // =========================== NoteTracker ===========================
+    {
+        NoteTracker t;
+        bool ok = ! t.held() && t.current() == -1;
+        t.noteOn (60); t.noteOn (64);
+        ok = ok && t.held() && t.current() == 64;
+        t.noteOff (64);
+        ok = ok && t.held() && t.current() == 60;          // falls back to the key still down
+        t.noteOff (60);
+        ok = ok && ! t.held() && t.current() == 60;        // all up: keeps the last pitch
+        t.noteOn (72); t.allOff();
+        ok = ok && ! t.held() && t.current() == 72;
+        t.noteOn (50); t.noteOn (50); t.noteOff (50);
+        ok = ok && ! t.held();                              // a repeated note-on does not need two note-offs
+        for (int n = 0; n < 40; ++n) t.noteOn (n);          // more than the stack holds: oldest drop out, nothing breaks
+        for (int n = 0; n < 40; ++n) t.noteOff (n);
+        ok = ok && ! t.held();
+        t.noteOn (-1); t.noteOn (128);
+        ok = ok && ! t.held();
+        printf ("note tracker: last-note priority, fall-back, overflow  %s\n", ok ? "OK" : "FAIL");
         fails += ! ok;
     }
     return fails;

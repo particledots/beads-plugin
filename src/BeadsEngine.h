@@ -36,6 +36,9 @@ public:
         bool softEdges = false;         // our addition: longer minimum grain fades (see GrainEnvelope::SetSoftEdges)
         int source = AudioIn;           // AudioIn or WavetableSynth
         int bank = 0;                   // wavetable bank 0..11 (synth mode only; the module uses the Feedback knob for this)
+        // Synth mode only. The plugin fills these from MIDI; the module has a V/oct input for the same job.
+        float midiPitchOffset = 0.0f;   // semitones added to Pitch (0 = the oscillator's own 130.81 Hz)
+        bool droneOn = true;            // false: the oscillator only sounds while a note is held (the grains are not affected)
     };
 
     BeadsEngine();
@@ -87,6 +90,7 @@ private:
     bool curSoft = false;
     bool paramsApplied = false;   // false until the first block has applied the host's Quality/Mono
     size_t blockSize = 12;
+    float oscLevel = 1.0f;        // smoothed oscillator level in synth mode (see Params::droneOn)
 
     SincResampler rsInL, rsInR, rsOutL, rsOutR;
     std::vector<float> tmpL, tmpR;

@@ -127,9 +127,7 @@ void BeadsEngine::runBlocks (const Params& p)
     if (curSource == WavetableSynth)
         pitch = std::clamp (pitch + p.midiPitchOffset, -100.0f, 100.0f);   // the pitch tables end at +-127 semitones
     setp (prm.pitch, pitch, p.pitchMod);
-    // Scale offsets above the base note: Major 0 2 4 5 7 9 11; Minor (natural) 0 2 3 5 7 8 10.
-    prm.pitch.scale_mask = p.pitchScale == ScaleMajor ? 0b101010110101
-                         : p.pitchScale == ScaleMinor ? 0b010110101101 : 0;
+    prm.pitch.scale_mask = Scales::maskFor (p.pitchScale);
     prm.monophonic_mode = false;
 
     ModulatedParameter d; d.base = p.density; d.cv = 0.0f;

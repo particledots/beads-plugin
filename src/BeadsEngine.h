@@ -7,6 +7,7 @@
 #include <cstdint>
 #include "Resampler.h"
 #include "WavetableLoader.h"
+#include "Scales.h"
 
 namespace beads { class Processor; class Synth; }
 
@@ -18,8 +19,9 @@ public:
     // AudioIn = the granular effect on the input. WavetableSynth = the module's idle mode
     // (wavetable oscillator + wavetable grains); the audio input is ignored there.
     enum Source { AudioIn = 0, WavetableSynth = 1 };
-    // Scale for the random pitch jumps (our addition). Built on the base pitch, i.e. the Pitch knob plus the played note.
-    enum PitchScale { ScaleOff = 0, ScaleMajor = 1, ScaleMinor = 2 };
+    // Scale for the random pitch jumps (our addition): 0 = off, 1..28 = Scales::kScales (Scales.h). Built on the base
+    // pitch, i.e. the Pitch knob plus the played note.
+    enum PitchScale { ScaleOff = 0, ScaleMajor = 1, ScaleMinor = 6 /* Aeolian */ };
     static constexpr int kNumBanks = 12;
 
     struct Params

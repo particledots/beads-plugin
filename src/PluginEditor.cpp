@@ -115,7 +115,8 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
     sourceAtt = std::make_unique<ComboAtt> (proc.apvts, "source", source);
     bankAtt   = std::make_unique<ComboAtt> (proc.apvts, "bank", bank);
 
-    pitchScale.addItemList ({ "Off", "Major", "Minor" }, 1);
+    pitchScale.addItem ("Off", 1);
+    for (int i = 0; i < Scales::kNumScales; ++i) pitchScale.addItem (Scales::kScales[i].name, i + 2);
     addAndMakeVisible (pitchScale);
     scaleAtt = std::make_unique<ComboAtt> (proc.apvts, "pitch_scale", pitchScale);
     pitchScale.setTooltip ("The random pitch jumps from the Pitch mod knob land only on notes of this scale, built on the note being played (or the Pitch knob if no note).");
@@ -307,5 +308,5 @@ void BeadsEditor::resized()
     midiPitch.setBounds (row6.removeFromLeft (130)); row6.removeFromLeft (8);
     drone.setBounds (row6.removeFromLeft (100)); row6.removeFromLeft (16);
     scaleLabel.setBounds (row6.removeFromLeft (82));
-    pitchScale.setBounds (row6.removeFromLeft (100).reduced (0, 6));
+    pitchScale.setBounds (row6.removeFromLeft (210).reduced (0, 6));
 }

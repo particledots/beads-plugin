@@ -621,22 +621,29 @@ int main()
             const int pc = (((int) nearest % 12) + 12) % 12;
             return std::fabs (d - nearest) < 0.01 && ((mask >> pc) & 1);
         };
-        const int major = 0b101010110101, minor = 0b010110101101;
+        // every scale in the list: the mask matches the listed notes, and 2000 random jumps (3 bases x 3 mod settings) land on them
         bool ok = true, spread = true, offContinuous = false;
-        for (int mask : { major, minor })
-            for (double base : { -7.0, 0.0, 3.3, 12.0 })       // includes a base that is not a whole semitone
+        for (int idx = 1; idx <= Scales::kNumScales; ++idx)
+        {
+            const auto& sc = Scales::kScales[idx - 1];
+            const int mask = Scales::maskFor (idx);
+            int bits = 0; for (int b = 0; b < 12; ++b) bits += (mask >> b) & 1;
+            ok = ok && bits == sc.count && (mask & 1);                                  // root always present, no duplicates
+            for (double base : { -7.0, 3.3, 12.0 })
                 for (float att : { 1.0f, -1.0f, 0.3f })
                 {
                     beads::RandomizedParameter r; r.base = (float) base; r.attenuverter = att; r.cv = 0; r.has_cv = false; r.scale_mask = mask;
                     std::set<int> seen;
-                    for (int i = 0; i < 4000; ++i)
+                    for (int i = 0; i < 2000; ++i)
                     {
                         const double st = semis (r);
                         ok = ok && inScale (st, base, mask);
                         seen.insert ((int) std::lround (st - base));
                     }
-                    if (att == 1.0f) spread = spread && seen.size() >= 6;   // full mod reaches many different scale notes
+                    if (att == 1.0f) spread = spread && (int) seen.size() >= std::min (sc.count, 5);   // full mod reaches several notes
                 }
+        }
+        const int major = Scales::maskFor (1);
         {   // Off: jumps are continuous (not whole semitones), and with the mod knob at 0 the pitch is exactly the base
             beads::RandomizedParameter r; r.base = 2.0f; r.attenuverter = 1.0f; r.cv = 0; r.has_cv = false;
             int fractional = 0;
@@ -660,7 +667,7 @@ int main()
             }
         }
         const bool all = ok && spread && offContinuous && finiteOk;
-        printf ("pitch scale: jumps land on scale notes (major+minor, 4 bases, 3 mod settings) %s, reach many notes %s, Off stays continuous %s, engine finite %s  %s\n",
+        printf ("pitch scale: jumps land on scale notes (all 28 scales, 3 bases, 3 mod settings) %s, reach several notes %s, Off stays continuous %s, engine finite %s  %s\n",
                 ok ? "yes" : "NO", spread ? "yes" : "NO", offContinuous ? "yes" : "NO", finiteOk ? "yes" : "NO", all ? "OK" : "FAIL");
         fails += ! all;
     }

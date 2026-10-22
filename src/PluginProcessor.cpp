@@ -53,8 +53,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout BeadsAudioProcessor::createL
     p.push_back (std::make_unique<APB> (juce::ParameterID { "midi_pitch", 3 }, "MIDI Pitch", true));
     p.push_back (std::make_unique<APB> (juce::ParameterID { "drone", 3 }, "Drone", false));
     // Scale for the random pitch jumps set by the pitch Mod knob (Off = continuous, as the module does it).
-    p.push_back (std::make_unique<APC> (juce::ParameterID { "pitch_scale", 4 }, "Pitch Scale",
-                 juce::StringArray { "Off", "Major", "Minor" }, 0));
+    juce::StringArray scaleNames { "Off" };
+    for (const auto& sc : Scales::kScales) scaleNames.add (sc.name);
+    p.push_back (std::make_unique<APC> (juce::ParameterID { "pitch_scale", 4 }, "Pitch Scale", scaleNames, 0));
     return { p.begin(), p.end() };
 }
 

@@ -1,5 +1,10 @@
 // Offline sanity test of BeadsEngine at several host sample rates / media modes.
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <cmath>
 #include <set>
+// The upstream headers rely on these standard headers being included first (CMake's beads_core adds them only to its own sources).
 #include "beads/dsp/randomized_parameter.h"
 #include "BeadsEngine.h"
 #include "NoteTracker.h"

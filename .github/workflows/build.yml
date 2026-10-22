@@ -17,8 +17,14 @@ jobs:
 
       - name: Build engine test, then run it
         run: |
-          cmake --build build --target engine_test -j4
-          ./build/engine_test
+          # Failures are also written as annotations (shown on the run page and readable through the API).
+          cmake --build build --target engine_test -j4 > build_log.txt 2>&1 || {
+            grep -E "error|Error" build_log.txt | head -8 | while IFS= read -r line; do echo "::error::BUILD: $line"; done
+            tail -5 build_log.txt; exit 1; }
+          ./build/engine_test > test_log.txt 2>&1; code=$?
+          cat test_log.txt
+          grep -E "FAIL" test_log.txt | head -8 | while IFS= read -r line; do echo "::error::TEST: $line"; done
+          exit $code
 
       - name: Build AU + VST3
         run: cmake --build build --target Beads_AU Beads_VST3 -j4

@@ -115,7 +115,12 @@ BeadsEditor::BeadsEditor (BeadsAudioProcessor& p) : AudioProcessorEditor (&p), p
     sourceAtt = std::make_unique<ComboAtt> (proc.apvts, "source", source);
     bankAtt   = std::make_unique<ComboAtt> (proc.apvts, "bank", bank);
 
-    for (auto* l : { &gateLabel, &qualityLabel, &sourceLabel, &bankLabel })
+    pitchScale.addItemList ({ "Off", "Major", "Minor" }, 1);
+    addAndMakeVisible (pitchScale);
+    scaleAtt = std::make_unique<ComboAtt> (proc.apvts, "pitch_scale", pitchScale);
+    pitchScale.setTooltip ("The random pitch jumps from the Pitch mod knob land only on notes of this scale, built on the note being played (or the Pitch knob if no note).");
+
+    for (auto* l : { &gateLabel, &qualityLabel, &sourceLabel, &bankLabel, &scaleLabel })
     {
         l->setJustificationType (juce::Justification::centredLeft);
         l->setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)));
@@ -300,5 +305,7 @@ void BeadsEditor::resized()
     // Row 6: synth-mode playing options
     auto row6 = juce::Rectangle<int> (24, 590, W - 48, 40);
     midiPitch.setBounds (row6.removeFromLeft (130)); row6.removeFromLeft (8);
-    drone.setBounds (row6.removeFromLeft (100));
+    drone.setBounds (row6.removeFromLeft (100)); row6.removeFromLeft (16);
+    scaleLabel.setBounds (row6.removeFromLeft (82));
+    pitchScale.setBounds (row6.removeFromLeft (100).reduced (0, 6));
 }

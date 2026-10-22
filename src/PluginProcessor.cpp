@@ -52,6 +52,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout BeadsAudioProcessor::createL
     // Synth mode: MIDI notes set the oscillator's pitch (on by default); Drone keeps the oscillator sounding with no note held (off by default).
     p.push_back (std::make_unique<APB> (juce::ParameterID { "midi_pitch", 3 }, "MIDI Pitch", true));
     p.push_back (std::make_unique<APB> (juce::ParameterID { "drone", 3 }, "Drone", false));
+    // Scale for the random pitch jumps set by the pitch Mod knob (Off = continuous, as the module does it).
+    p.push_back (std::make_unique<APC> (juce::ParameterID { "pitch_scale", 4 }, "Pitch Scale",
+                 juce::StringArray { "Off", "Major", "Minor" }, 0));
     return { p.begin(), p.end() };
 }
 
@@ -147,6 +150,7 @@ BeadsEngine::Params BeadsAudioProcessor::readParams() const
     p.source = (int) v ("source");
     p.bank = (int) v ("bank");
     p.droneOn = v ("drone") > 0.5f;
+    p.pitchScale = (int) v ("pitch_scale");
     return p;
 }
 

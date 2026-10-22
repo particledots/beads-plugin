@@ -92,6 +92,9 @@ struct RandomizedParameter {
   float attenuverter;
   float cv;
   bool has_cv;
+  // Plugin addition: when non-zero, the random part of the pitch (see pitch_value) snaps to the notes of a
+  // scale built on the base pitch. Bit n set = n semitones above the base pitch is allowed (bit 0 = the base itself).
+  int scale_mask = 0;
   
   inline float randomness_amount() const {
     if (has_cv) {
@@ -146,7 +149,24 @@ struct RandomizedParameter {
   }
   
   inline float pitch_value() const {
-    return stmlib::SemitonesToRatio(value(NULL, 0, 24.0f, false));
+    const float semitones = value(NULL, 0, 24.0f, false);
+    if (scale_mask == 0) {
+      return stmlib::SemitonesToRatio(semitones);
+    }
+    // Plugin addition: snap the random offset (not the base pitch) to the nearest scale note.
+    const float offset = semitones - base;
+    const int centre = static_cast<int>(floorf(offset));
+    float best = 0.0f, best_distance = 1.0e9f;
+    for (int k = centre - 13; k <= centre + 14; ++k) {
+      const int pitch_class = ((k % 12) + 12) % 12;
+      if (!((scale_mask >> pitch_class) & 1)) continue;
+      const float distance = fabsf(static_cast<float>(k) - offset);
+      if (distance < best_distance) {
+        best_distance = distance;
+        best = static_cast<float>(k);
+      }
+    }
+    return stmlib::SemitonesToRatio(base + best);
   }
 };
 

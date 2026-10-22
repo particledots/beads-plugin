@@ -1,4 +1,6 @@
 // Offline sanity test of BeadsEngine at several host sample rates / media modes.
+#include <set>
+#include "beads/dsp/randomized_parameter.h"
 #include "BeadsEngine.h"
 #include "NoteTracker.h"
 #include "WavetableLoader.h"
@@ -602,6 +604,60 @@ int main()
             printf ("drone off, fully wet free-run grains: rms %.4f  %s\n", level, ok ? "OK" : "FAIL");
             fails += ! ok;
         }
+    }
+
+    // =========================== Pitch scale (random pitch jumps) ===========================
+    {
+        auto semis = [] (const beads::RandomizedParameter& r) { return 12.0 * std::log2 ((double) r.pitch_value()); };
+        auto inScale = [] (double st, double base, int mask)
+        {
+            const double d = st - base;
+            const double nearest = std::round (d);
+            const int pc = (((int) nearest % 12) + 12) % 12;
+            return std::fabs (d - nearest) < 0.01 && ((mask >> pc) & 1);
+        };
+        const int major = 0b101010110101, minor = 0b010110101101;
+        bool ok = true, spread = true, offContinuous = false;
+        for (int mask : { major, minor })
+            for (double base : { -7.0, 0.0, 3.3, 12.0 })       // includes a base that is not a whole semitone
+                for (float att : { 1.0f, -1.0f, 0.3f })
+                {
+                    beads::RandomizedParameter r; r.base = (float) base; r.attenuverter = att; r.cv = 0; r.has_cv = false; r.scale_mask = mask;
+                    std::set<int> seen;
+                    for (int i = 0; i < 4000; ++i)
+                    {
+                        const double st = semis (r);
+                        ok = ok && inScale (st, base, mask);
+                        seen.insert ((int) std::lround (st - base));
+                    }
+                    if (att == 1.0f) spread = spread && seen.size() >= 6;   // full mod reaches many different scale notes
+                }
+        {   // Off: jumps are continuous (not whole semitones), and with the mod knob at 0 the pitch is exactly the base
+            beads::RandomizedParameter r; r.base = 2.0f; r.attenuverter = 1.0f; r.cv = 0; r.has_cv = false;
+            int fractional = 0;
+            for (int i = 0; i < 200; ++i) fractional += std::fabs (semis (r) - 2.0 - std::round (semis (r) - 2.0)) > 0.05;
+            offContinuous = fractional > 100;
+            r.attenuverter = 0.0f; r.scale_mask = major;
+            for (int i = 0; i < 50; ++i) ok = ok && std::fabs (semis (r) - 2.0) < 1e-3;
+        }
+        // through the engine: a scale setting runs finite in both sources
+        bool finiteOk = true;
+        for (int src : { (int) BeadsEngine::AudioIn, (int) BeadsEngine::WavetableSynth })
+        {
+            BeadsEngine e; e.prepare (48000.0);
+            BeadsEngine::Params p; p.source = src; p.pitchScale = BeadsEngine::ScaleMinor; p.pitchMod = 1.0f; p.density = 1.0f; p.dryWet = 1.0f;
+            std::vector<float> in (480), l (480), r (480);
+            for (int b = 0; b < 100; ++b)
+            {
+                for (int i = 0; i < 480; ++i) in[(size_t) i] = 0.3f * (float) std::sin (0.05 * (b * 480 + i));
+                e.process (in.data(), in.data(), l.data(), r.data(), 480, p, nullptr);
+                for (float x : l) finiteOk = finiteOk && std::isfinite (x) && std::fabs (x) < 8.f;
+            }
+        }
+        const bool all = ok && spread && offContinuous && finiteOk;
+        printf ("pitch scale: jumps land on scale notes (major+minor, 4 bases, 3 mod settings) %s, reach many notes %s, Off stays continuous %s, engine finite %s  %s\n",
+                ok ? "yes" : "NO", spread ? "yes" : "NO", offContinuous ? "yes" : "NO", finiteOk ? "yes" : "NO", all ? "OK" : "FAIL");
+        fails += ! all;
     }
 
     // =========================== NoteTracker ===========================

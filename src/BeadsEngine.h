@@ -18,6 +18,8 @@ public:
     // AudioIn = the granular effect on the input. WavetableSynth = the module's idle mode
     // (wavetable oscillator + wavetable grains); the audio input is ignored there.
     enum Source { AudioIn = 0, WavetableSynth = 1 };
+    // Scale for the random pitch jumps (our addition). Built on the base pitch, i.e. the Pitch knob plus the played note.
+    enum PitchScale { ScaleOff = 0, ScaleMajor = 1, ScaleMinor = 2 };
     static constexpr int kNumBanks = 12;
 
     struct Params
@@ -38,6 +40,7 @@ public:
         int bank = 0;                   // wavetable bank 0..11 (synth mode only; the module uses the Feedback knob for this)
         // Synth mode only. The plugin fills these from MIDI; the module has a V/oct input for the same job.
         float midiPitchOffset = 0.0f;   // semitones added to Pitch (0 = the oscillator's own 130.81 Hz)
+        int pitchScale = ScaleOff;      // snaps the random pitch jumps of the grains to this scale
         bool droneOn = true;            // false: the oscillator only sounds while a note is held (the grains are not affected)
     };
 

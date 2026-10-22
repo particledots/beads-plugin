@@ -69,4 +69,4 @@ target_link_libraries(Beads PRIVATE
 # --- Headless test of the DSP wrapper:  cmake --build build --target engine_test && build/engine_test ---
 add_executable(engine_test EXCLUDE_FROM_ALL src/engine_test.cpp)
 target_link_libraries(engine_test PRIVATE beads_core)
-target_compile_definitions(engine_test PRIVATE BEADS_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+target_compile_definitions(engine_test PRIVATE TEST=1 BEADS_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
